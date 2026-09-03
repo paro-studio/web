@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
@@ -16,10 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { X, ImageIcon, TrendingUp } from "lucide-react";
+import { X, ImageIcon, TrendingUp, AlertCircle, Clock, ShieldCheck } from "lucide-react";
 import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
 import { FEATURED_AI_TOOL, OTHER_AI_TOOLS } from "@/lib/aiTools";
+import { checkDailyUploadLimit, type DailyUploadLimitStatus } from "@/services/supabase/prompts";
 
 export default function UploadPrompt() {
   const navigate = useNavigate();
@@ -39,6 +40,24 @@ export default function UploadPrompt() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [customTool, setCustomTool] = useState("");
+  const [limitStatus, setLimitStatus] = useState<DailyUploadLimitStatus | null>(null);
+  const [isCheckingLimit, setIsCheckingLimit] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      setIsCheckingLimit(true);
+      checkDailyUploadLimit(user.id, profile?.verified)
+        .then((status) => {
+          setLimitStatus(status);
+        })
+        .catch((err) => {
+          console.error("Failed to check upload limit:", err);
+        })
+        .finally(() => {
+          setIsCheckingLimit(false);
+        });
+    }
+  }, [user, profile?.verified]);
 
   // Get the actual tool name for submission
   const getActualToolName = () => {
@@ -124,7 +143,19 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 2. Image required
+    // 2. Check daily upload limit for unverified accounts
+    const currentLimit = await checkDailyUploadLimit(user.id, profile?.verified);
+    setLimitStatus(currentLimit);
+    if (!currentLimit.canUpload) {
+      toast({
+        title: "Daily upload limit reached",
+        description: "Unverified accounts can upload a maximum of 3 prompts per day. Limit resets at 12:00 AM UTC.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // 3. Image required
     if (!imageFile) {
       toast({
         title: "Image required",
@@ -134,7 +165,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 3. Image size check (3MB max - already validated but double-check)
+    // 4. Image size check (3MB max - already validated but double-check)
     if (imageFile.size > 3 * 1024 * 1024) {
       toast({
         title: "Image too large",
@@ -144,7 +175,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 4. Title required
+    // 5. Title required
     if (!title.trim()) {
       toast({
         title: "Title required",
@@ -154,7 +185,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 5. Prompt text required
+    // 6. Prompt text required
     if (!promptText.trim()) {
       toast({
         title: "Prompt required",
@@ -164,7 +195,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 6. AI Tool required
+    // 7. AI Tool required
     const actualTool = getActualToolName();
     if (!actualTool) {
       toast({
@@ -175,7 +206,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 7. Minimum 3 tags
+    // 8. Minimum 3 tags
     if (tags.length < 3) {
       toast({
         title: "More tags needed",
@@ -325,6 +356,38 @@ export default function UploadPrompt() {
             <h1 className="font-serif text-2xl sm:text-3xl text-center mb-6 sm:mb-8">
               Upload Prompt
             </h1>
+
+            {/* Daily Upload Limit Status Banner */}
+            {limitStatus && (
+              <div className="mb-6">
+                {limitStatus.isVerified ? (
+                  <div className="flex items-center gap-2 p-3 bg-secondary/40 border border-border/50 rounded-sm text-xs sm:text-sm text-muted-foreground">
+                    <ShieldCheck className="h-4 w-4 text-accent flex-shrink-0" />
+                    <span>Verified Creator &bull; Unlimited daily uploads</span>
+                  </div>
+                ) : limitStatus.remaining <= 0 ? (
+                  <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-sm text-destructive flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-sm sm:text-base">Daily upload limit reached (3/3)</h4>
+                      <p className="text-xs sm:text-sm mt-1 text-destructive/90">
+                        Unverified accounts can upload a maximum of 3 prompts per calendar day. Deleting prompts does not restore your daily allowance. Your limit will reset at 12:00 AM UTC.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2 p-3 bg-secondary/40 border border-border/50 rounded-sm text-xs sm:text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-foreground/70 flex-shrink-0" />
+                      <span>
+                        <strong className="text-foreground">{limitStatus.remaining} of {limitStatus.limit}</strong> daily uploads remaining today
+                      </span>
+                    </div>
+                    <span className="text-[11px] sm:text-xs text-muted-foreground/80">Resets at 12:00 AM UTC</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Image Upload */}
@@ -579,13 +642,20 @@ export default function UploadPrompt() {
                 className="w-full text-sm sm:text-base py-2.5 sm:py-3"
                 disabled={
                   isSubmitting ||
+                  (limitStatus !== null && !limitStatus.isVerified && limitStatus.remaining <= 0) ||
                   !toolUsed ||
                   (toolUsed === "Other" && !customTool.trim()) ||
                   tags.length < 3 ||
                   (useUrl ? !imageUrl.trim() : !imageFile)
                 }
               >
-                {isUploading ? "Uploading image..." : isSubmitting ? "Saving..." : "Upload Prompt"}
+                {isUploading
+                  ? "Uploading image..."
+                  : isSubmitting
+                  ? "Saving..."
+                  : limitStatus && !limitStatus.isVerified && limitStatus.remaining <= 0
+                  ? "Daily Limit Reached (3/3)"
+                  : "Upload Prompt"}
               </Button>
             </form>
           </div>
