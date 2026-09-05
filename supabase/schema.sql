@@ -130,15 +130,6 @@ create table if not exists public.prompt_reports (
   unique (user_id, prompt_id)
 );
 
--- Upload history tracking for prompt rate limiting / daily caps.
--- Persists even if prompts are subsequently deleted by the user.
-create table if not exists public.prompt_uploads (
-  id         uuid        primary key default gen_random_uuid(),
-  user_id    uuid        not null references auth.users (id) on delete cascade,
-  prompt_id  uuid        references public.prompts (id) on delete set null,
-  created_at timestamptz not null default now()
-);
-
 -- Indexes, as production actually has them. An earlier version of this file
 -- also listed prompts_user_id, prompts_created_at, likes_prompt_id and
 -- follows_following. Production has never had those. `supabase db diff` on
@@ -149,7 +140,6 @@ create table if not exists public.prompt_uploads (
 -- a checkpoint, not a wish list.
 create index if not exists prompt_ratings_prompt_id_idx on public.prompt_ratings (prompt_id);
 create index if not exists prompt_reports_prompt_id_idx on public.prompt_reports (prompt_id);
-create index if not exists prompt_uploads_user_created_idx on public.prompt_uploads (user_id, created_at desc);
 
 -- Named separately in production rather than declared inline on the tables
 -- above, so they are reproduced with the names production uses. Renaming them
@@ -195,70 +185,6 @@ as $$
    where id = prompt_id;
 $$;
 
--- Daily prompt upload limit enforcement for unverified accounts (max 3 uploads/day, resets at midnight UTC)
-create or replace function public.check_prompt_upload_limit()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  is_verified boolean;
-  daily_upload_count integer;
-  day_start timestamptz;
-begin
-  select coalesce(verified, false) into is_verified
-  from public.profiles
-  where id = new.user_id;
-
-  -- Verified accounts have no daily limit restriction
-  if is_verified is true then
-    return new;
-  end if;
-
-  -- Start of current UTC calendar day (12:00 AM UTC)
-  day_start := date_trunc('day', now() at time zone 'utc') at time zone 'utc';
-
-  select count(*) into daily_upload_count
-  from public.prompt_uploads
-  where user_id = new.user_id
-    and created_at >= day_start;
-
-  if daily_upload_count >= 3 then
-    raise exception 'Daily upload limit reached. Unverified accounts can upload a maximum of 3 prompts per day.'
-      using errcode = 'P0001';
-  end if;
-
-  return new;
-end;
-$$;
-
--- Automatically record an upload in prompt_uploads on prompt creation
-create or replace function public.log_prompt_upload()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.prompt_uploads (user_id, prompt_id, created_at)
-  values (new.user_id, new.id, new.created_at);
-  return new;
-end;
-$$;
-
-drop trigger if exists check_prompt_upload_limit_trigger on public.prompts;
-create trigger check_prompt_upload_limit_trigger
-  before insert on public.prompts
-  for each row
-  execute function public.check_prompt_upload_limit();
-
-drop trigger if exists log_prompt_upload_trigger on public.prompts;
-create trigger log_prompt_upload_trigger
-  after insert on public.prompts
-  for each row
-  execute function public.log_prompt_upload();
-
 -- ---------------------------------------------------------------------------
 -- Row Level Security
 -- ---------------------------------------------------------------------------
@@ -277,7 +203,6 @@ alter table public.follows        enable row level security;
 alter table public.feedback       enable row level security;
 alter table public.prompt_ratings enable row level security;
 alter table public.prompt_reports enable row level security;
-alter table public.prompt_uploads enable row level security;
 
 -- profiles -------------------------------------------------------------------
 -- Public read is deliberate: profiles are shown to signed-out visitors.
@@ -414,16 +339,6 @@ create policy "Users can submit reports"
   on public.prompt_reports for insert
   to authenticated
   with check (auth.uid() = user_id);
-
--- prompt_uploads -------------------------------------------------------------
--- Users can view their own upload logs to check daily limits.
--- Writes are handled exclusively by the log_prompt_upload trigger (SECURITY DEFINER),
--- so no insert policy is needed.
-
-create policy "Users can view their own prompt uploads"
-  on public.prompt_uploads for select
-  to authenticated
-  using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
 -- Storage
@@ -828,6 +743,107 @@ create trigger set_prompt_ratings_updated_at
   execute function public.handle_updated_at();
 
 -- --------------------------------------------------------------------------
+-- 20260908000000_add_prompt_upload_limit.sql
+-- --------------------------------------------------------------------------
+
+-- Enforce daily upload limit of 3 prompts for unverified accounts
+-- Tracks prompt uploads persistently across prompt deletions.
+
+-- ---------------------------------------------------------------------------
+-- prompt_uploads table & index
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.prompt_uploads (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        not null references public.profiles (id) on delete cascade,
+  prompt_id  uuid        references public.prompts (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists prompt_uploads_user_created_idx
+  on public.prompt_uploads (user_id, created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Functions & Triggers
+-- ---------------------------------------------------------------------------
+
+-- Daily prompt upload limit enforcement for unverified accounts (max 3 uploads/day, resets at midnight UTC)
+create or replace function public.check_prompt_upload_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  is_verified boolean;
+  daily_upload_count integer;
+  day_start timestamptz;
+begin
+  perform pg_advisory_xact_lock(hashtext('prompt_upload:' || new.user_id::text));
+
+  select coalesce(verified, false) into is_verified
+  from public.profiles
+  where id = new.user_id;
+
+  if is_verified is true then
+    return new;
+  end if;
+
+  day_start := date_trunc('day', now() at time zone 'UTC') at time zone 'UTC';
+
+  select count(*) into daily_upload_count
+  from public.prompt_uploads
+  where user_id = new.user_id
+    and created_at >= day_start;
+
+  if daily_upload_count >= 3 then
+    raise exception 'Daily prompt upload limit reached for unverified accounts (3 per day). Limit resets at midnight UTC.'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Log prompt upload into prompt_uploads audit table on new prompt creation
+create or replace function public.log_prompt_upload()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.prompt_uploads (user_id, prompt_id, created_at)
+  values (new.user_id, new.id, coalesce(new.created_at, now()));
+  return new;
+end;
+$$;
+
+create trigger check_prompt_upload_limit_trigger
+  before insert on public.prompts
+  for each row
+  execute function public.check_prompt_upload_limit();
+
+create trigger log_prompt_upload_trigger
+  after insert on public.prompts
+  for each row
+  execute function public.log_prompt_upload();
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security
+-- ---------------------------------------------------------------------------
+
+alter table public.prompt_uploads enable row level security;
+
+-- Users can view their own upload logs to check daily limits.
+-- Writes are handled exclusively by the log_prompt_upload trigger (SECURITY DEFINER),
+-- so no insert policy is needed.
+create policy "Users can view their own prompt uploads"
+  on public.prompt_uploads for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+-- --------------------------------------------------------------------------
 -- After running this
 -- --------------------------------------------------------------------------
 --
@@ -839,3 +855,4 @@ create trigger set_prompt_ratings_updated_at
 -- To set yourself as verified so the badge shows up, run this in the SQL
 -- Editor. It is the only way, the app cannot write that column:
 --   update public.profiles set verified = true where username = 'your_username';
+
