@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
+import { Eye, Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -595,6 +595,10 @@ export function PromptCard({
 
         {/* Stats */}
         <div className="flex items-center gap-3 sm:gap-4 mt-1.5 sm:mt-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-0.5 sm:gap-1" title="Views">
+            <Eye className="h-3 w-3" />
+            <span className="tabular-nums">{(viewCount ?? 0).toLocaleString()}</span>
+          </span>
           <span className="flex items-center gap-0.5 sm:gap-1" title="Copies">
             <Copy className="h-3 w-3" />
             <span className="tabular-nums">{(copyCount ?? 0).toLocaleString()}</span>

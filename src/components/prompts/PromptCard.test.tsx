@@ -81,4 +81,15 @@ describe("PromptCard", () => {
     const cardContainer = image.closest(".hover-lift");
     expect(cardContainer).toBeInTheDocument();
   });
+
+  it("renders view count stat when viewCount is provided", () => {
+    renderPromptCard({
+      ...baseProps,
+      viewCount: 150,
+    });
+
+    const viewsElement = screen.getByTitle("Views");
+    expect(viewsElement).toBeInTheDocument();
+    expect(viewsElement).toHaveTextContent("150");
+  });
 });

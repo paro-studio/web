@@ -19,9 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { PromptWithDetails } from "@/hooks/usePrompts";
-import { ExternalLink, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-
 
 export default function Profile() {
   const { id } = useParams<{ id: string }>();
