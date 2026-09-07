@@ -8,7 +8,9 @@ import {
   getAllPrompts,
   getPrompt,
   getUserPrompts,
+  searchPrompts,
   updatePrompt,
+  PROMPT_COLUMNS,
 } from "./prompts";
 import { supabase } from "./client";
 
@@ -71,6 +73,7 @@ describe("prompts service", () => {
       const { prompts, error } = await getAllPrompts(25);
 
       expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(selectMock).toHaveBeenCalledWith(PROMPT_COLUMNS);
       expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
       expect(limitMock).toHaveBeenCalledWith(25);
       expect(error).toBeNull();
@@ -160,6 +163,7 @@ describe("prompts service", () => {
       const { prompts, error } = await getUserPrompts("user-1");
 
       expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(selectMock).toHaveBeenCalledWith(PROMPT_COLUMNS);
       expect(eqMock).toHaveBeenCalledWith("user_id", "user-1");
       expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
       expect(error).toBeNull();
@@ -249,6 +253,108 @@ describe("prompts service", () => {
       expect(eqUserMock).toHaveBeenCalledWith("user_id", "user-1");
       expect(error).toBeNull();
       expect(prompt).toEqual({ id: "prompt-1", title: "Updated Title" });
+    });
+  });
+
+  describe("getPrompt", () => {
+    it("fetches single prompt enumerating PROMPT_COLUMNS to exclude fts", async () => {
+      const singleMock = vi.fn().mockResolvedValue({
+        data: mockDbPrompts[0],
+        error: null,
+      });
+      const eqMock = vi.fn().mockReturnValue({ single: singleMock });
+      const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      const { prompt, error } = await getPrompt("prompt-1");
+
+      expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(selectMock).toHaveBeenCalledWith(PROMPT_COLUMNS);
+      expect(eqMock).toHaveBeenCalledWith("id", "prompt-1");
+      expect(error).toBeNull();
+      expect(prompt).toEqual(mockDbPrompts[0]);
+    });
+  });
+
+  describe("searchPrompts", () => {
+    it("searches by query using textSearch on fts index", async () => {
+      const limitMock = vi.fn().mockResolvedValue({
+        data: [mockDbPrompts[0]],
+        error: null,
+      });
+      const orderMock = vi.fn().mockReturnValue({ limit: limitMock });
+      const textSearchMock = vi.fn().mockReturnValue({ order: orderMock });
+      const selectMock = vi.fn().mockReturnValue({ textSearch: textSearchMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      const { prompts, error } = await searchPrompts({ query: "cyberpunk", limit: 10 });
+
+      expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(selectMock).toHaveBeenCalledWith(PROMPT_COLUMNS);
+      expect(textSearchMock).toHaveBeenCalledWith("fts", "cyberpunk", {
+        config: "english",
+        type: "websearch",
+      });
+      expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
+      expect(limitMock).toHaveBeenCalledWith(10);
+      expect(error).toBeNull();
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0].title).toBe("Cyberpunk City");
+    });
+
+    it("filters by tags using overlaps on tags index", async () => {
+      const limitMock = vi.fn().mockResolvedValue({
+        data: [mockDbPrompts[0]],
+        error: null,
+      });
+      const orderMock = vi.fn().mockReturnValue({ limit: limitMock });
+      const overlapsMock = vi.fn().mockReturnValue({ order: orderMock });
+      const selectMock = vi.fn().mockReturnValue({ overlaps: overlapsMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      const { prompts, error } = await searchPrompts({ tags: ["cyberpunk", "city"] });
+
+      expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(selectMock).toHaveBeenCalledWith(PROMPT_COLUMNS);
+      expect(overlapsMock).toHaveBeenCalledWith("tags", ["cyberpunk", "city"]);
+      expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
+      expect(limitMock).toHaveBeenCalledWith(50);
+      expect(error).toBeNull();
+      expect(prompts).toHaveLength(1);
+    });
+
+    it("combines textSearch and overlaps when both query and tags are provided", async () => {
+      const limitMock = vi.fn().mockResolvedValue({
+        data: [mockDbPrompts[0]],
+        error: null,
+      });
+      const orderMock = vi.fn().mockReturnValue({ limit: limitMock });
+      const overlapsMock = vi.fn().mockReturnValue({ order: orderMock });
+      const textSearchMock = vi.fn().mockReturnValue({ overlaps: overlapsMock });
+      const selectMock = vi.fn().mockReturnValue({ textSearch: textSearchMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      const { prompts, error } = await searchPrompts({ query: "cyberpunk", tags: ["city"] });
+
+      expect(textSearchMock).toHaveBeenCalledWith("fts", "cyberpunk", {
+        config: "english",
+        type: "websearch",
+      });
+      expect(overlapsMock).toHaveBeenCalledWith("tags", ["city"]);
+      expect(error).toBeNull();
+      expect(prompts).toHaveLength(1);
     });
   });
 });

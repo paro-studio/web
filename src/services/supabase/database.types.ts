@@ -336,6 +336,7 @@ export type Database = {
           ai_tool: string
           copy_count: number
           created_at: string
+          fts: unknown | null
           id: string
           image_url: string
           prompt: string
