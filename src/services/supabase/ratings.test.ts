@@ -86,12 +86,13 @@ describe("ratings service", () => {
 
   describe("ratePrompt & getUserPromptRating", () => {
     it("clamps rating between 1 and 5 and saves to supabase", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
       const eqMock = vi.fn().mockResolvedValue({ data: [{ rating: 5 }], error: null });
       const maybeSingleMock = vi.fn().mockResolvedValue({ data: { rating: 5 }, error: null });
 
       vi.mocked(supabase.from).mockImplementation(() => {
         return {
-          upsert: vi.fn().mockResolvedValue({ error: null }),
+          upsert: upsertMock,
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockImplementation((col: string) => {
               if (col === "user_id") {
@@ -111,6 +112,15 @@ describe("ratings service", () => {
       expect(error).toBeNull();
       expect(ratingInfo.average).toBe(5.0);
       expect(ratingInfo.count).toBe(1);
+      expect(upsertMock).toHaveBeenCalledWith(
+        {
+          user_id: "user-1",
+          prompt_id: "prompt-1",
+          rating: 5,
+        },
+        { onConflict: "user_id,prompt_id" }
+      );
+      expect(upsertMock.mock.calls[0][0]).not.toHaveProperty("updated_at");
 
       const userRating = await getUserPromptRating("user-1", "prompt-1");
       expect(userRating).toBe(5);

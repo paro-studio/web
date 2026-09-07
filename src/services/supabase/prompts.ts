@@ -170,10 +170,7 @@ export async function getAllPrompts(
 export async function updatePrompt(id: string, userId: string, updates: Partial<CreatePromptData>) {
   const { data, error } = await supabase
     .from('prompts')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    })
+    .update(updates)
     .eq('id', id)
     .eq('user_id', userId) // RLS check
     .select()
