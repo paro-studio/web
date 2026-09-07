@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { PromptWithDetails } from "@/hooks/usePrompts";
-import { ExternalLink } from "lucide-react";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 
 

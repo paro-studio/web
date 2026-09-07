@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             avatar_url: supabaseProfile.avatar_url,
             cover_url: supabaseProfile.cover_url,
             bio: supabaseProfile.bio,
+            verified: supabaseProfile.verified ?? false,
           };
           return userProfile;
         }
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           avatar_url: supabaseProfile.avatar_url,
           cover_url: supabaseProfile.cover_url,
           bio: supabaseProfile.bio,
+          verified: supabaseProfile.verified ?? false,
         };
       }
 

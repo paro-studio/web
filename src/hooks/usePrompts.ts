@@ -142,26 +142,6 @@ export function usePrompts(options?: {
   });
 }
 
-export function useTags() {
-  return useQuery({
-    queryKey: ["tags"],
-    queryFn: async () => {
-      // Get all prompts and extract unique tags
-      const { getAllPrompts } = await import('@/services/supabase/prompts');
-      const { prompts, error } = await getAllPrompts(100);
-      
-      if (error || !prompts) return [];
-      
-      const tagsSet = new Set<string>();
-      prompts.forEach(p => {
-        p.tags?.forEach(tag => tagsSet.add(tag));
-      });
-      
-      return Array.from(tagsSet).sort();
-    },
-  });
-}
-
 export function useTopCreators(limit = 6) {
   return useQuery({
     queryKey: ["top-creators", limit],

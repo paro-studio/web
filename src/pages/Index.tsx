@@ -25,7 +25,6 @@ export default function Index() {
   );
   const [sortBy, setSortBy] = useState<SortOption>("trending");
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -55,9 +54,6 @@ export default function Index() {
 
   // Always use fixed predefined tags - never changes based on user uploads
   const displayTags = [...STANDARD_TAGS];
-  // Mobile tags - exclude solo, landscape, fashion, product shot (fits in 2 rows)
-  const mobileExcludedTags = ["solo", "landscape", "fashion", "product shot"];
-  const mobileTags = displayTags.filter(tag => !mobileExcludedTags.includes(tag));
 
   // Filter prompts by search and tags
   const filteredPrompts = useMemo(() => {
@@ -138,7 +134,6 @@ export default function Index() {
         key={item.type === "image" ? item.data.id : item.data.id}
         item={item}
         onLoginRequired={() => setAuthModalOpen(true)}
-        onDelete={() => setRefreshKey(prev => prev + 1)}
         // Enough to cover the first row on desktop and the first screen on
         // mobile. One of these is the largest contentful paint, and lazy
         // loading it was costing seconds. Everything below still lazy loads.

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "lucide-react";
+import { Eye, Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -388,6 +388,10 @@ export default function PromptDetail() {
 
                 {/* Stats */}
                 <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1" title="Views">
+                    <Eye className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                    <span className="tabular-nums">{(prompt.viewCount || 0).toLocaleString()}</span>
+                  </span>
                   <span className="flex items-center gap-1" title="Copies">
                     <Copy className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                     <span className="tabular-nums">{prompt.copyCount.toLocaleString()}</span>
@@ -583,7 +587,7 @@ export default function PromptDetail() {
                 <h2 className="font-serif text-lg sm:text-xl mb-3 sm:mb-4">More like this</h2>
 
                 <div className="masonry-grid">
-                  {recommendations.slice(0, 8).map((rec) => (
+                  {recommendations.map((rec) => (
                     <PromptCard
                       key={rec.id}
                       id={rec.id}
