@@ -71,4 +71,15 @@ describe("PromptCard", () => {
     expect(ratingElement).toBeInTheDocument();
     expect(ratingElement).toHaveTextContent("Not rated");
   });
+
+  it("renders view count stat when viewCount is provided", () => {
+    renderPromptCard({
+      ...baseProps,
+      viewCount: 150,
+    });
+
+    const viewsElement = screen.getByTitle("Views");
+    expect(viewsElement).toBeInTheDocument();
+    expect(viewsElement).toHaveTextContent("150");
+  });
 });
