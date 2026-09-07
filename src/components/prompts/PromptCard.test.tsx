@@ -1,11 +1,14 @@
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PromptCard } from "./PromptCard";
 
+let mockUser: { id: string } | null = null;
+let mockProfile: { id: string } | null = null;
+
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ user: null, profile: null, loading: false }),
+  useAuth: () => ({ user: mockUser, profile: mockProfile, loading: false }),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -52,6 +55,11 @@ describe("PromptCard", () => {
     tags: ["portrait", "realistic"],
   };
 
+  beforeEach(() => {
+    mockUser = null;
+    mockProfile = null;
+  });
+
   it("renders accuracy rating when provided explicitly with ratingCount > 0", () => {
     renderPromptCard({
       ...baseProps,
@@ -70,5 +78,46 @@ describe("PromptCard", () => {
     const ratingElement = screen.getByLabelText("Not yet rated");
     expect(ratingElement).toBeInTheDocument();
     expect(ratingElement).toHaveTextContent("Not rated");
+  });
+
+  it("renders mobile menu trigger with legible overlay styling without hardcoded text-black", () => {
+    renderPromptCard(baseProps);
+
+    const [mobileTrigger] = screen.getAllByLabelText("More options");
+    expect(mobileTrigger).toBeInTheDocument();
+    expect(mobileTrigger.className).toContain("rounded-full");
+    expect(mobileTrigger.className).toContain("backdrop-blur-sm");
+    expect(mobileTrigger.className).not.toContain("text-black");
+  });
+
+  it("opens delete confirmation in an accessible Radix dialog for prompt owner", async () => {
+    mockUser = { id: "creator-1" };
+    mockProfile = { id: "creator-1" };
+    renderPromptCard(baseProps);
+
+    // Click desktop dropdown trigger (second "More options" button) to view owner actions
+    const [, desktopTrigger] = screen.getAllByLabelText("More options");
+    fireEvent.pointerDown(desktopTrigger, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(desktopTrigger, { key: "ArrowDown" });
+
+    const deleteMenuItem = screen.getByText("Delete");
+    fireEvent.click(deleteMenuItem);
+
+    // Radix dialog should be present with role="dialog"
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("Delete Prompt?")).toBeInTheDocument();
+    expect(
+      screen.getByText("This will permanently delete this prompt and its image. This cannot be undone.")
+    ).toBeInTheDocument();
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    const deleteButton = screen.getByRole("button", { name: "Delete" });
+    expect(cancelButton).toBeInTheDocument();
+    expect(deleteButton).toBeInTheDocument();
+
+    // Clicking cancel should dismiss the dialog
+    fireEvent.click(cancelButton);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
