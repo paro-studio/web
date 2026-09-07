@@ -199,7 +199,7 @@ export function SharePromptDialog({
               >
                 <Icon className="h-5 w-5" />
               </span>
-              <span className="w-full text-center truncate text-[11px] text-muted-foreground group-hover:text-foreground transition-colors">
+              <span className="w-full text-center truncate text-xs text-muted-foreground group-hover:text-foreground transition-colors">
                 {target.name}
               </span>
             </button>
@@ -214,7 +214,7 @@ export function SharePromptDialog({
             <span className="h-12 w-12 rounded-full bg-secondary border border-border flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
               <MoreHorizontal className="h-5 w-5 text-foreground" />
             </span>
-            <span className="w-full text-center truncate text-[11px] text-muted-foreground group-hover:text-foreground transition-colors">
+            <span className="w-full text-center truncate text-xs text-muted-foreground group-hover:text-foreground transition-colors">
               More
             </span>
           </button>

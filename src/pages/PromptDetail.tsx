@@ -403,7 +403,7 @@ export default function PromptDetail() {
                     >
                       <Star className="h-3 sm:h-3.5 w-3 sm:w-3.5 fill-gold text-gold" />
                       <span className="tabular-nums">{accuracyRating.toFixed(1)}</span>
-                      <span className="text-muted-foreground text-[11px]">({ratingCount})</span>
+                      <span className="text-muted-foreground text-xs">({ratingCount})</span>
                     </span>
                   ) : (
                     <span
@@ -411,7 +411,7 @@ export default function PromptDetail() {
                       title="Not yet rated"
                     >
                       <Star className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground/50" />
-                      <span className="text-[11px]">Not rated</span>
+                      <span className="text-xs">Not rated</span>
                     </span>
                   )}
                   <span className="text-xs px-2 py-0.5 bg-secondary rounded-sm">
@@ -490,7 +490,7 @@ export default function PromptDetail() {
                       </div>
                       <div>
                         <h4 className="text-xs sm:text-sm font-semibold leading-none text-foreground">Prompt Accuracy Rating</h4>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           How consistently this prompt delivers the expected result
                         </p>
                       </div>
@@ -503,7 +503,7 @@ export default function PromptDetail() {
                             <span>{accuracyRating.toFixed(1)}</span>
                             <span className="text-xs text-muted-foreground font-normal">/ 5.0</span>
                           </div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             {ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'}
                           </div>
                         </>
@@ -512,7 +512,7 @@ export default function PromptDetail() {
                           <div className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1 justify-end">
                             <span>Not yet rated</span>
                           </div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             Be the first to rate
                           </div>
                         </>
