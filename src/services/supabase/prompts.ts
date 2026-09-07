@@ -15,6 +15,7 @@ export interface Prompt {
   image_url: string;
   ai_tool: string;
   tags?: string[];
+  fts?: unknown;
   created_at?: string;
   updated_at?: string;
 }
@@ -148,6 +149,65 @@ export async function getAllPrompts(
   }
 
   // Normalize to camelCase (match PromptWithDetails shape)
+  const normalizedPrompts: NormalizedPrompt[] = (data || []).map(p => ({
+    id: p.id,
+    userId: p.user_id,
+    title: p.title,
+    promptText: p.prompt,
+    imageUrl: p.image_url,
+    toolUsed: p.ai_tool,
+    tags: p.tags || [],
+    createdAt: p.created_at,
+    viewCount: p.view_count || 0,
+    copyCount: p.copy_count || 0,
+  }));
+
+  return { prompts: normalizedPrompts, error: null };
+}
+
+export interface SearchPromptsOptions {
+  query?: string;
+  tags?: string[];
+  limit?: number;
+}
+
+/**
+ * Search prompts using database full-text search index (prompts_fts_idx)
+ * and tags array index (prompts_tags_idx)
+ */
+export async function searchPrompts(
+  options: SearchPromptsOptions = {}
+): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
+  const { query, tags, limit = 50 } = options;
+
+  let queryBuilder = supabase
+    .from('prompts')
+    .select('*');
+
+  if (query && query.trim()) {
+    queryBuilder = queryBuilder.textSearch('fts', query.trim(), {
+      config: 'english',
+      type: 'websearch',
+    });
+  }
+
+  if (tags && tags.length > 0) {
+    queryBuilder = queryBuilder.overlaps('tags', tags);
+  }
+
+  const { data, error } = await queryBuilder
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('❌ searchPrompts: Fetch failed:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+    return { prompts: [], error };
+  }
+
   const normalizedPrompts: NormalizedPrompt[] = (data || []).map(p => ({
     id: p.id,
     userId: p.user_id,
