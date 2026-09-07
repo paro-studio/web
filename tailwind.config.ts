@@ -125,8 +125,8 @@ export default {
         elevated: "var(--shadow-elevated)",
       },
       transitionDuration: {
-        slow: "500ms",
-        medium: "350ms",
+        slow: "250ms",
+        medium: "200ms",
       },
       keyframes: {
         "accordion-down": {

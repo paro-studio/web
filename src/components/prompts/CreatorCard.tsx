@@ -24,7 +24,7 @@ export function CreatorCard({
   return (
     <Link
       to={`/profile/${id}`}
-      className="flex items-center gap-4 p-4 bg-card rounded-sm hover-lift transition-all duration-300"
+      className="flex items-center gap-4 p-4 bg-card rounded-sm hover-lift transition-all duration-medium"
     >
       <Avatar className="h-14 w-14">
         <AvatarImage src={avatarUrl || ""} alt={displayName || username} />
