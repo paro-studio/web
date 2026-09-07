@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { peekPendingRoute, clearPendingRoute } from "@/lib/pendingRoute";
@@ -16,8 +16,13 @@ import { AuthModal } from "@/components/auth/AuthModal";
 type SortOption = "trending" | "newest" | "most_copied";
 
 export default function Index() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const selectedTags = useMemo(
+    () => [...new Set(searchParams.getAll("tag"))],
+    [searchParams]
+  );
   const [sortBy, setSortBy] = useState<SortOption>("trending");
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -95,9 +100,24 @@ export default function Index() {
   }, [prompts, searchQuery, selectedTags, sortBy]);
 
   const handleTagToggle = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    const nextTags = selectedTags.includes(tag)
+      ? selectedTags.filter((t) => t !== tag)
+      : [...selectedTags, tag];
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("tag");
+
+    nextTags.forEach((selectedTag) => {
+      nextParams.append("tag", selectedTag);
+    });
+
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleClearTags = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("tag");
+    setSearchParams(nextParams, { replace: true });
   };
 
   // Convert filtered prompts to FeedItem format and prepare for future ad injection
@@ -178,7 +198,7 @@ export default function Index() {
               tags={displayTags}
               selectedTags={selectedTags}
               onTagToggle={handleTagToggle}
-              onClearAll={() => setSelectedTags([])}
+              onClearAll={handleClearTags}
             />
           </div>
         </section>
