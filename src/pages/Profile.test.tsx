@@ -5,8 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import Profile from "./Profile";
 import { supabase } from "@/services/supabase/client";
 
+const mockAuthState = {
+  user: null as { id: string } | null,
+  profile: null as { id: string; username: string } | null,
+  loading: false,
+};
+
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ user: null, profile: null, loading: false }),
+  useAuth: () => mockAuthState,
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -49,6 +55,8 @@ const mockPrompts = [
   },
 ];
 
+let currentPromptsData = mockPrompts;
+
 function createQueryBuilder(table: string) {
   const builder = {
     select: () => builder,
@@ -58,14 +66,14 @@ function createQueryBuilder(table: string) {
     order: () => builder,
     limit: () => builder,
     single: async () => ({
-      data: table === "profiles" ? mockProfile : mockPrompts[0],
+      data: table === "profiles" ? mockProfile : currentPromptsData[0] || null,
       error: null,
     }),
     maybeSingle: async () => ({ data: null, error: null }),
     then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
       Promise.resolve(
         table === "prompts"
-          ? { data: mockPrompts, error: null }
+          ? { data: currentPromptsData, error: null }
           : table === "profiles"
           ? { data: [mockProfile], error: null }
           : { data: [], count: 0, error: null },
@@ -93,6 +101,9 @@ function renderProfile() {
 
 describe("Profile Page", () => {
   beforeEach(() => {
+    currentPromptsData = mockPrompts;
+    mockAuthState.user = null;
+    mockAuthState.profile = null;
     vi.mocked(supabase.from).mockImplementation((table) => createQueryBuilder(table));
     vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: null });
   });
@@ -106,5 +117,32 @@ describe("Profile Page", () => {
     const promptImage = await screen.findByAltText("Futuristic Cyberpunk City");
     expect(promptImage).toBeInTheDocument();
     expect(promptImage).toHaveAttribute("src", "https://example.test/cyberpunk.png");
+  });
+
+  it("renders upload invitation on own empty profile", async () => {
+    currentPromptsData = [];
+    mockAuthState.user = { id: "user-1" };
+    mockAuthState.profile = { id: "user-1", username: "creator_jane" };
+
+    renderProfile();
+
+    expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
+    expect(await screen.findByText("You haven't posted any prompts yet")).toBeInTheDocument();
+
+    const uploadLink = await screen.findByRole("link", { name: /post your first prompt/i });
+    expect(uploadLink).toBeInTheDocument();
+    expect(uploadLink).toHaveAttribute("href", "/upload");
+  });
+
+  it("renders plain 'No prompts yet' on other user's empty profile without upload invitation", async () => {
+    currentPromptsData = [];
+    mockAuthState.user = { id: "user-other" };
+    mockAuthState.profile = { id: "user-other", username: "other_user" };
+
+    renderProfile();
+
+    expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
+    expect(await screen.findByText("No prompts yet")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /post your first prompt/i })).not.toBeInTheDocument();
   });
 });

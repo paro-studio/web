@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Sparkles } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { Sparkles, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { peekPendingRoute, clearPendingRoute } from "@/lib/pendingRoute";
 import { STANDARD_TAGS } from "@/lib/standardTags";
@@ -10,6 +10,7 @@ import { FeedCard } from "@/components/feed";
 import { TagFilter } from "@/components/prompts/TagFilter";
 import { usePrompts } from "@/hooks/usePrompts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { FeedItem, toImageFeedItem, injectAdvertisements } from "@/lib/feedTypes";
 import { AuthModal } from "@/components/auth/AuthModal";
 
@@ -223,14 +224,45 @@ export default function Index() {
                 ))}
               </div>
             ) : filteredPrompts.length === 0 ? (
-              <div className="text-center py-12 sm:py-16">
-                <p className="font-serif text-lg sm:text-xl text-muted-foreground">
-                  No prompts found
-                </p>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                  Try adjusting your search or filters
-                </p>
-              </div>
+              searchQuery.trim() || selectedTags.length > 0 ? (
+                <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
+                  <p className="font-serif text-lg sm:text-xl text-muted-foreground">
+                    No prompts found
+                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                    Try adjusting your search or filters
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchQuery("");
+                      handleClearTags();
+                    }}
+                    className="mt-4"
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-4 text-muted-foreground">
+                    <Sparkles className="h-6 w-6 text-gold" />
+                  </div>
+                  <h3 className="font-serif text-xl sm:text-2xl mb-2">
+                    No prompts yet
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Be the first to share your creative prompt and inspire the community.
+                  </p>
+                  <Button asChild size="default" className="gap-2">
+                    <Link to="/upload">
+                      <Plus className="h-4 w-4" />
+                      Post a prompt
+                    </Link>
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="masonry-grid">
                 {renderFeed()}

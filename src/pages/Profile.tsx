@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { PromptWithDetails } from "@/hooks/usePrompts";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 
 
@@ -295,9 +295,29 @@ export default function Profile() {
                 ))}
               </div>
             ) : prompts?.length === 0 ? (
-              <div className="text-center py-8 sm:py-12">
-                <p className="text-sm sm:text-base text-muted-foreground">No prompts yet</p>
-              </div>
+              isOwnProfile ? (
+                <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-4 text-muted-foreground">
+                    <Sparkles className="h-6 w-6 text-gold" />
+                  </div>
+                  <h3 className="font-serif text-lg sm:text-xl mb-2">
+                    You haven't posted any prompts yet
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Share your prompts to showcase your creative workflows with the community and build your profile.
+                  </p>
+                  <Button asChild size="default" className="gap-2">
+                    <Link to="/upload">
+                      <Plus className="h-4 w-4" />
+                      Post your first prompt
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-8 sm:py-12">
+                  <p className="text-sm sm:text-base text-muted-foreground">No prompts yet</p>
+                </div>
+              )
             ) : (
               <div className="masonry-grid">
                 {prompts?.map((prompt) => (
