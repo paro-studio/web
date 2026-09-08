@@ -352,7 +352,7 @@ export default function PromptDetail() {
                 <img
                   src={prompt.imageUrl}
                   alt={prompt.title}
-                  className="max-h-[40vh] sm:max-h-[35vh] lg:max-h-[50vh] w-auto max-w-full object-contain rounded-sm shadow-card"
+                  className="max-h-[40vh] sm:max-h-[35vh] lg:max-h-[50vh] w-auto max-w-full object-contain rounded-xl shadow-card"
                   loading="lazy"
                 />
               </div>
@@ -425,8 +425,10 @@ export default function PromptDetail() {
                     onClick={handleCopy}
                     size="default"
                     className={cn(
-                      "gap-1.5 sm:gap-2 text-sm",
-                      copied && "bg-gold text-gold-foreground"
+                      "gap-1.5 sm:gap-2 text-sm transition-colors",
+                      copied
+                        ? "bg-green-500 hover:bg-green-500 text-white hover:text-white"
+                        : ""
                     )}
                   >
                     {copied ? (
