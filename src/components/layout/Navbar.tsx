@@ -363,7 +363,7 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
 
                     {/* Support */}
                     <DropdownMenuItem asChild>
-                      <a href="mailto:support@paro.ai" className="flex items-center gap-2">
+                      <a href="mailto:support@parostudios.in" className="flex items-center gap-2">
                         <HelpCircle className="h-4 w-4" />
                         Support
                       </a>

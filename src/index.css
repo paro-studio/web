@@ -73,9 +73,10 @@
     --shadow-card: 0 4px 30px -8px hsl(220 10% 18% / 0.08);
     --shadow-elevated: 0 8px 40px -12px hsl(220 10% 18% / 0.12);
 
-    /* Transitions - Slow, elegant */
-    --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-medium: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Transitions - Snappy, responsive (180ms - 250ms) */
+    --transition-slow: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-medium: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fade: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 
     /* Responsive container padding */
     --container-padding-mobile: 1rem;
@@ -246,7 +247,7 @@
 
   .link-editorial::after {
     content: "";
-    @apply absolute bottom-0 left-0 w-full h-px bg-current opacity-0 transition-opacity duration-500;
+    @apply absolute bottom-0 left-0 w-full h-px bg-current opacity-0 transition-opacity duration-medium;
   }
 
   .link-editorial:hover::after {
@@ -347,7 +348,7 @@
 
   /* Fade in animation */
   .fade-in {
-    animation: fadeIn var(--transition-slow) forwards;
+    animation: fadeIn var(--transition-fade) forwards;
   }
 
   @keyframes fadeIn {
@@ -362,7 +363,7 @@
     }
   }
 
-  /* Slow scale on hover */
+  /* Snappy lift on hover & press */
   .hover-lift {
     transition:
       transform var(--transition-medium),
@@ -372,6 +373,11 @@
   .hover-lift:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-elevated);
+  }
+
+  .hover-lift:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-card);
   }
 
   /* Disable hover effects on touch devices for better performance */
