@@ -41,7 +41,11 @@ export default function Feedback() {
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-base text-foreground">Email Us</h3>
-                                        <p className="text-muted-foreground text-sm mt-1">support@paro.com</p>
+                                        <p className="text-muted-foreground text-sm mt-1">
+                                            <a href="mailto:support@parostudios.in" className="hover:underline hover:text-foreground transition-colors">
+                                                support@parostudios.in
+                                            </a>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
