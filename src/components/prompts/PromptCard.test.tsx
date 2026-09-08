@@ -71,4 +71,14 @@ describe("PromptCard", () => {
     expect(ratingElement).toBeInTheDocument();
     expect(ratingElement).toHaveTextContent("Not rated");
   });
+
+  it("applies snappy transition tokens to card and image", () => {
+    renderPromptCard(baseProps);
+
+    const image = screen.getByAltText(baseProps.title);
+    expect(image).toHaveClass("transition-transform", "duration-medium");
+
+    const cardContainer = image.closest(".hover-lift");
+    expect(cardContainer).toBeInTheDocument();
+  });
 });
