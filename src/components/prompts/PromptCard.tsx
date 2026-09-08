@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
+import { Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -106,9 +106,9 @@ export function PromptCard({
   // Only the creator can delete; everyone else gets Report in that slot.
   const isOwner = !!user && !!profile && profile.id === creator.id;
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleCopy = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
 
     if (!user) {
       onLoginRequired?.();
@@ -125,9 +125,9 @@ export function PromptCard({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleLike = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleLike = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
 
     if (!user) {
       toast({
@@ -151,9 +151,9 @@ export function PromptCard({
     onLikeChange?.();
   };
 
-  const handleSave = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleSave = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
 
     if (!user) {
       toast({
@@ -252,15 +252,15 @@ export function PromptCard({
             e.preventDefault();
             e.stopPropagation();
           }}
-          className="absolute top-2 sm:top-3 right-2 sm:right-3 lg:hidden z-30 pointer-events-auto"
+          className="absolute top-2 sm:top-3 right-2 sm:right-3 md:hidden z-30 pointer-events-auto"
         >
           <Drawer open={mobileMenuOpen} onOpenChange={setMobileMenuOpen} dismissible={true}>
             <DrawerTrigger asChild>
               <button
-                className="p-1.5"
+                className="p-1.5 rounded-full bg-background/80 hover:bg-background/90 text-foreground backdrop-blur-sm border border-border/50 shadow-sm transition-colors"
                 aria-label="More options"
               >
-                <MoreVertical className="h-5 w-5 text-black drop-shadow-md" />
+                <MoreVertical className="h-4 w-4" />
               </button>
             </DrawerTrigger>
           
@@ -269,46 +269,89 @@ export function PromptCard({
             <DrawerTitle className="sr-only">Post options</DrawerTitle>
             <DrawerDescription className="sr-only">Actions for this prompt</DrawerDescription>
             
-            {/* Primary Actions - Large Circular Buttons */}
-            <div className="flex items-center justify-center gap-8 py-6">
+            {/* Primary Actions - Circular Buttons */}
+            <div className="grid grid-cols-5 gap-2 sm:gap-4 py-6 text-center">
+              {/* Copy Prompt Button */}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleCopy();
+                  setTimeout(() => setMobileMenuOpen(false), 250);
+                }}
+                className="flex flex-col items-center gap-1.5 min-w-0"
+              >
+                <div
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors",
+                    copied ? "bg-gold/20 border-gold" : "bg-secondary border-border"
+                  )}
+                >
+                  {copied ? (
+                    <Check className="h-5 w-5 text-gold" />
+                  ) : (
+                    <Copy className="h-5 w-5 text-foreground" />
+                  )}
+                </div>
+                <span className="text-xs font-medium text-foreground truncate w-full">
+                  {copied ? "Copied" : "Copy"}
+                </span>
+              </button>
+
+              {/* Like Button */}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleLike();
+                }}
+                className="flex flex-col items-center gap-1.5 min-w-0"
+              >
+                <div
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors",
+                    localLiked ? "bg-destructive/10 border-destructive/50" : "bg-secondary border-border"
+                  )}
+                >
+                  <Heart
+                    className={cn(
+                      "h-5 w-5 text-foreground",
+                      localLiked && "fill-destructive text-destructive"
+                    )}
+                  />
+                </div>
+                <span className="text-xs font-medium text-foreground truncate w-full">
+                  {localLiked ? "Unlike" : "Like"}
+                </span>
+              </button>
+
               {/* Save Button */}
               <button
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   handleSave(e);
-                  setTimeout(() => setMobileMenuOpen(false), 100);
                 }}
-                className="flex flex-col items-center gap-2"
+                className="flex flex-col items-center gap-1.5 min-w-0"
               >
-                <div className={cn(
-                  "w-16 h-16 rounded-full flex items-center justify-center border-2 transition-colors",
-                  localSaved 
-                    ? "bg-gold/20 border-gold" 
-                    : "bg-secondary border-border"
-                )}>
-                  <Bookmark className={cn(
-                    "h-6 w-6",
-                    localSaved && "fill-gold text-gold"
-                  )} />
+                <div
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors",
+                    localSaved 
+                      ? "bg-gold/20 border-gold" 
+                      : "bg-secondary border-border"
+                  )}
+                >
+                  <Bookmark
+                    className={cn(
+                      "h-5 w-5 text-foreground",
+                      localSaved && "fill-gold text-gold"
+                    )}
+                  />
                 </div>
-                <span className="text-sm font-medium text-foreground">
+                <span className="text-xs font-medium text-foreground truncate w-full">
                   {localSaved ? "Unsave" : "Save"}
                 </span>
-              </button>
-
-              {/* Copy Link Button */}
-              <button
-                onClick={(e) => {
-                  handleCopyLink(e);
-                  setMobileMenuOpen(false);
-                }}
-                className="flex flex-col items-center gap-2"
-              >
-                <div className="w-16 h-16 rounded-full bg-secondary border-2 border-border flex items-center justify-center transition-colors">
-                  <LinkIcon className="h-6 w-6 text-foreground" />
-                </div>
-                <span className="text-sm font-medium text-foreground">Copy Link</span>
               </button>
 
               {/* Share Button - one drawer closes before the other opens */}
@@ -319,12 +362,26 @@ export function PromptCard({
                   setMobileMenuOpen(false);
                   setTimeout(() => setShareOpen(true), 250);
                 }}
-                className="flex flex-col items-center gap-2"
+                className="flex flex-col items-center gap-1.5 min-w-0"
               >
-                <div className="w-16 h-16 rounded-full bg-secondary border-2 border-border flex items-center justify-center transition-colors">
-                  <Share2 className="h-6 w-6 text-foreground" />
+                <div className="w-12 h-12 rounded-full bg-secondary border-2 border-border flex items-center justify-center transition-colors">
+                  <Share2 className="h-5 w-5 text-foreground" />
                 </div>
-                <span className="text-sm font-medium text-foreground">Share</span>
+                <span className="text-xs font-medium text-foreground truncate w-full">Share</span>
+              </button>
+
+              {/* Copy Link Button */}
+              <button
+                onClick={(e) => {
+                  handleCopyLink(e);
+                  setMobileMenuOpen(false);
+                }}
+                className="flex flex-col items-center gap-1.5 min-w-0"
+              >
+                <div className="w-12 h-12 rounded-full bg-secondary border-2 border-border flex items-center justify-center transition-colors">
+                  <LinkIcon className="h-5 w-5 text-foreground" />
+                </div>
+                <span className="text-xs font-medium text-foreground truncate w-full">Link</span>
               </button>
             </div>
 
@@ -333,6 +390,22 @@ export function PromptCard({
 
             {/* Secondary Actions - List Items */}
             <div className="flex flex-col gap-1">
+              {/* Edit for owner on profile */}
+              {showEditButton && onEditClick && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMobileMenuOpen(false);
+                    onEditClick();
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-secondary rounded-sm transition-colors text-left"
+                >
+                  <Pencil className="h-5 w-5 text-foreground" />
+                  <span className="text-sm font-medium text-foreground">Edit Prompt</span>
+                </button>
+              )}
+
               {/* View Profile */}
               <DrawerClose asChild>
                 <Link
@@ -376,17 +449,23 @@ export function PromptCard({
                   <span className="text-sm font-medium text-destructive">Report</span>
                 </button>
               )}
+
+              {/* AI Tool Info */}
+              <div className="flex items-center gap-3 px-4 py-2.5 text-xs text-muted-foreground border-t border-border/50 mt-1">
+                <Sparkles className="h-4 w-4 text-gold flex-shrink-0" />
+                <span>AI Tool: <strong className="text-foreground font-medium">{toolUsed}</strong></span>
+              </div>
             </div>
           </DrawerContent>
         </Drawer>
         </div>
 
-        {/* Copy button - top LEFT on all devices, visible on hover for desktop */}
+        {/* Copy button - top LEFT on all devices, visible on hover for desktop, always visible on touch */}
         <button
           onClick={handleCopy}
           className={cn(
             "absolute top-2 sm:top-3 left-2 sm:left-3 p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 touch-target flex items-center justify-center",
-            "opacity-100 lg:opacity-0 lg:group-hover:opacity-100",
+            "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 [@media(hover:none)]:!opacity-100",
             copied && "bg-gold/90"
           )}
           title="Copy prompt"
@@ -400,7 +479,7 @@ export function PromptCard({
         </button>
 
         {/* Like & Save - top RIGHT on desktop only, visible on hover */}
-        <div className="absolute top-2 sm:top-3 right-2 sm:right-3 hidden lg:flex gap-1.5 sm:gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="absolute top-2 sm:top-3 right-2 sm:right-3 hidden md:flex gap-1.5 sm:gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           <button
             onClick={handleLike}
             className="p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 touch-target flex items-center justify-center"
@@ -433,7 +512,7 @@ export function PromptCard({
         {/* Share button - bottom RIGHT on desktop only, visible on hover, stacked over watermark */}
         <button
           onClick={handleShare}
-          className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 hidden lg:flex p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 opacity-0 group-hover:opacity-100 z-10 items-center justify-center"
+          className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 hidden md:flex p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 opacity-0 group-hover:opacity-100 z-10 items-center justify-center"
           title="Share"
           aria-label="Share prompt"
         >
@@ -448,7 +527,7 @@ export function PromptCard({
               e.stopPropagation();
               onEditClick();
             }}
-            className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 lg:right-16 p-1.5 sm:p-2 rounded-full bg-gold text-foreground opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity z-10 flex items-center justify-center"
+            className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 md:right-16 p-1.5 sm:p-2 rounded-full bg-gold text-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 [@media(hover:none)]:!opacity-100 transition-opacity z-10 flex items-center justify-center"
             title="Edit prompt"
             aria-label="Edit prompt"
           >
@@ -470,7 +549,7 @@ export function PromptCard({
             </h3>
           </Link>
 
-          {/* Three-dot menu - Desktop only */}
+          {/* Three-dot menu - Desktop / Tablet */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -478,7 +557,7 @@ export function PromptCard({
                   e.preventDefault();
                   e.stopPropagation();
                 }}
-                className="hidden lg:flex items-center justify-center p-1 hover:bg-secondary rounded-sm transition-colors cursor-pointer"
+                className="hidden md:flex items-center justify-center p-1 hover:bg-secondary rounded-sm transition-colors cursor-pointer"
                 aria-label="More options"
               >
                 <MoreHorizontal className="h-5 w-5 text-foreground" />
@@ -486,16 +565,16 @@ export function PromptCard({
             </DropdownMenuTrigger>
             
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleShare}>
-                <Share2 className="h-4 w-4 mr-2" />
-                Share
+              <DropdownMenuItem onClick={handleCopy}>
+                {copied ? <Check className="h-4 w-4 mr-2 text-gold" /> : <Copy className="h-4 w-4 mr-2" />}
+                {copied ? "Copied Prompt" : "Copy Prompt"}
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleCopyLink}>
-                <LinkIcon className="h-4 w-4 mr-2" />
-                Copy Link
+              <DropdownMenuItem onClick={handleLike}>
+                <Heart className={cn("h-4 w-4 mr-2", localLiked && "fill-destructive text-destructive")} />
+                {localLiked ? "Unlike" : "Like"}
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem
                 onClick={(e) => {
                   e.preventDefault();
@@ -506,7 +585,30 @@ export function PromptCard({
                 <Bookmark className={cn("h-4 w-4 mr-2", localSaved && "fill-gold text-gold")} />
                 {localSaved ? "Unsave" : "Save"}
               </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={handleShare}>
+                <Share2 className="h-4 w-4 mr-2" />
+                Share
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={handleCopyLink}>
+                <LinkIcon className="h-4 w-4 mr-2" />
+                Copy Link
+              </DropdownMenuItem>
               
+              {showEditButton && onEditClick && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onEditClick();
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Prompt
+                </DropdownMenuItem>
+              )}
+
               <DropdownMenuItem asChild>
                 <Link to={`/profile/${creator.id}`} className="flex items-center cursor-pointer">
                   <UserCircle className="h-4 w-4 mr-2" />
@@ -545,11 +647,17 @@ export function PromptCard({
                   Report
                 </DropdownMenuItem>
               )}
+
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-xs text-muted-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-gold flex-shrink-0" />
+                <span>Tool: <strong className="text-foreground font-medium">{toolUsed}</strong></span>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Like & Share buttons - visible on mobile/tablet only, next to title */}
-          <div className="flex lg:hidden gap-1 sm:gap-1.5 flex-shrink-0">
+          {/* Like & Share buttons - visible on mobile only, next to title */}
+          <div className="flex md:hidden gap-1 sm:gap-1.5 flex-shrink-0">
             <button
               onClick={handleLike}
               className={cn(
