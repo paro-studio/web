@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { getAllPrompts, getUserPrompts } from "./prompts";
+import { getAllPrompts, getUserPrompts, updatePrompt } from "./prompts";
 import { supabase } from "./client";
 
 vi.mock("./client", () => ({
@@ -166,6 +166,34 @@ describe("prompts service", () => {
           copyCount: 5,
         },
       ]);
+    });
+  });
+
+  describe("updatePrompt", () => {
+    it("updates prompt without sending updated_at", async () => {
+      const singleMock = vi.fn().mockResolvedValue({
+        data: { id: "prompt-1", title: "Updated Title" },
+        error: null,
+      });
+      const selectMock = vi.fn().mockReturnValue({ single: singleMock });
+      const eqUserMock = vi.fn().mockReturnValue({ select: selectMock });
+      const eqIdMock = vi.fn().mockReturnValue({ eq: eqUserMock });
+      const updateMock = vi.fn().mockReturnValue({ eq: eqIdMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        update: updateMock,
+      } as never);
+
+      const updates = { title: "Updated Title" };
+      const { prompt, error } = await updatePrompt("prompt-1", "user-1", updates);
+
+      expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(updateMock).toHaveBeenCalledWith(updates);
+      expect(updateMock.mock.calls[0][0]).not.toHaveProperty("updated_at");
+      expect(eqIdMock).toHaveBeenCalledWith("id", "prompt-1");
+      expect(eqUserMock).toHaveBeenCalledWith("user_id", "user-1");
+      expect(error).toBeNull();
+      expect(prompt).toEqual({ id: "prompt-1", title: "Updated Title" });
     });
   });
 });

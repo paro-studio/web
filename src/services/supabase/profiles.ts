@@ -131,10 +131,7 @@ export async function createProfile(user: User) {
 export async function updateProfile(userId: string, updates: UpdateProfileData) {
   const { data, error } = await supabase
     .from('profiles')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq('id', userId)
     .select()
     .single();
