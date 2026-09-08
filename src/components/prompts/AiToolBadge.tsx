@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdobeIcon, GeminiIcon, MetaIcon, OpenAIIcon } from "./toolIcons";
@@ -45,21 +46,37 @@ interface AiToolBadgeProps {
 }
 
 export function AiToolBadge({ tool, className }: AiToolBadgeProps) {
+  const [showFull, setShowFull] = useState(false);
   // "Other" lets people type anything, so an unknown name is expected, not a bug.
   const { label, icon: Icon, emoji } = PRESENTATION[tool] ?? { label: tool, icon: Sparkles };
+  const displayText = showFull ? tool : label;
 
   return (
-    // The full name stays in the tooltip — the label is abbreviated, and on a
-    // card there is no room to spell out "NANO BANANA (Gemini)".
-    <span className={cn("flex items-center gap-1 min-w-0", className)} title={tool}>
+    // The full name is findable via title tooltip on desktop, via tap/click
+    // toggle on touch devices, and via aria-label for assistive tech.
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowFull((prev) => !prev);
+      }}
+      className={cn(
+        "flex items-center gap-1 min-w-0 text-left cursor-pointer hover:text-foreground transition-colors",
+        className
+      )}
+      title={tool}
+      aria-label={`AI tool: ${tool}`}
+      aria-expanded={showFull}
+    >
       {emoji ? (
-        <span aria-hidden="true" className="flex-shrink-0 text-[13px] leading-none">
+        <span aria-hidden="true" className="flex-shrink-0 text-xs leading-none">
           {emoji}
         </span>
       ) : (
         Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />
       )}
-      <span className="truncate">{label}</span>
-    </span>
+      <span className="truncate">{displayText}</span>
+    </button>
   );
 }
