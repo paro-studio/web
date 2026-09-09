@@ -12,6 +12,7 @@ export interface UserProfile {
   avatar_url: string | null;
   cover_url: string | null;
   bio: string | null;
+  verified?: boolean;
 }
 
 export interface NormalizedPrompt {
