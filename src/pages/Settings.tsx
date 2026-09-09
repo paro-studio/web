@@ -398,7 +398,7 @@ export default function Settings() {
                   <p className="text-sm text-destructive">{usernameError}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  paro.ai/profile/{username || "username"}
+                  parostudios.in/profile/{user?.id || "id"}
                 </p>
               </div>
 

@@ -7,6 +7,87 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from './client';
 import type { NormalizedPrompt } from '@/lib/types';
 
+export const DAILY_UPLOAD_LIMIT_UNVERIFIED = 3;
+
+export interface DailyUploadLimitStatus {
+  canUpload: boolean;
+  remaining: number;
+  uploadedToday: number;
+  limit: number;
+  isVerified: boolean;
+  error: PostgrestError | null;
+}
+
+/**
+ * Get ISO string of the start of the current UTC calendar day (00:00:00.000Z)
+ */
+export function getUtcMidnightIso(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)).toISOString();
+}
+
+/**
+ * Get total prompt uploads made by the user today (UTC calendar day)
+ * Tracks uploads via `prompt_uploads` table so deleting prompts does NOT reset the count.
+ */
+export async function getDailyUploadCount(userId: string): Promise<{ count: number; error: PostgrestError | null }> {
+  const dayStart = getUtcMidnightIso();
+  const { count, error } = await supabase
+    .from('prompt_uploads')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', dayStart);
+
+  if (error) {
+    console.error('Error fetching daily upload count:', error);
+    return { count: 0, error };
+  }
+
+  return { count: count ?? 0, error: null };
+}
+
+/**
+ * Check if a user can upload a prompt today based on verification status and daily upload count
+ */
+export async function checkDailyUploadLimit(
+  userId: string,
+  isVerified: boolean = false
+): Promise<DailyUploadLimitStatus> {
+  if (isVerified) {
+    return {
+      canUpload: true,
+      remaining: Infinity,
+      uploadedToday: 0,
+      limit: Infinity,
+      isVerified: true,
+      error: null,
+    };
+  }
+
+  const { count, error } = await getDailyUploadCount(userId);
+  if (error) {
+    return {
+      canUpload: false,
+      remaining: 0,
+      uploadedToday: count,
+      limit: DAILY_UPLOAD_LIMIT_UNVERIFIED,
+      isVerified: false,
+      error,
+    };
+  }
+
+  const remaining = Math.max(0, DAILY_UPLOAD_LIMIT_UNVERIFIED - count);
+  return {
+    canUpload: remaining > 0,
+    remaining,
+    uploadedToday: count,
+    limit: DAILY_UPLOAD_LIMIT_UNVERIFIED,
+    isVerified: false,
+    error: null,
+  };
+}
+
+
 export interface Prompt {
   id: string;
   user_id: string;
@@ -170,10 +251,7 @@ export async function getAllPrompts(
 export async function updatePrompt(id: string, userId: string, updates: Partial<CreatePromptData>) {
   const { data, error } = await supabase
     .from('prompts')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    })
+    .update(updates)
     .eq('id', id)
     .eq('user_id', userId) // RLS check
     .select()

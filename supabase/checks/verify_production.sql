@@ -17,13 +17,13 @@ with checks as (
     1 as ord,
     'RLS enabled on every public table' as check_name,
     case when count(*) = 0 then 'PASS' else 'FAIL' end as status,
-    coalesce(string_agg(c.relname, ', '), 'all 8 enabled') as detail
+    coalesce(string_agg(c.relname, ', '), 'all 9 enabled') as detail
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relname in ('profiles', 'prompts', 'likes', 'saves', 'follows',
-                      'feedback', 'prompt_ratings', 'prompt_reports')
+                      'feedback', 'prompt_ratings', 'prompt_reports', 'prompt_uploads')
     and not c.relrowsecurity
 
   union all

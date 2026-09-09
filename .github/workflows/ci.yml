@@ -89,15 +89,5 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Check the app's own columns are still writable
-        # Guards against a migration over-revoking and silently breaking writes.
-        run: |
-          psql -v ON_ERROR_STOP=1 -t -A -c "
-            select case when
-                 has_column_privilege('authenticated', 'public.profiles', 'username',   'UPDATE')
-             and has_column_privilege('authenticated', 'public.profiles', 'avatar_url', 'UPDATE')
-             and has_column_privilege('authenticated', 'public.prompts',  'title',      'UPDATE')
-             and has_column_privilege('authenticated', 'public.prompts',  'tags',       'INSERT')
-             and not has_column_privilege('authenticated', 'public.profiles', 'verified',   'UPDATE')
-             and not has_column_privilege('authenticated', 'public.prompts',  'view_count', 'UPDATE')
-            then 'ok' else 'FAILED' end" | grep -qx ok
+      - name: Assert RLS policies and column grants
+        run: psql -v ON_ERROR_STOP=1 -f supabase/ci/assert_access_control.sql
