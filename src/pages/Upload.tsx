@@ -256,9 +256,12 @@ export default function UploadPrompt() {
         const { deletePromptImage } = await import('@/services/supabase/storage');
         await deletePromptImage(uploadedImageUrl);
         
+        const isLimitError = dbError?.code === 'P0001' || dbError?.message?.includes('Daily prompt upload limit');
         toast({
-          title: "Upload failed",
-          description: dbError?.message || "Could not save prompt to database",
+          title: isLimitError ? "Daily upload limit reached" : "Upload failed",
+          description: isLimitError
+            ? "Unverified accounts can upload a maximum of 3 prompts per day. Limit resets at 12:00 AM UTC."
+            : (dbError?.message || "Could not save prompt to database"),
           variant: "destructive",
         });
         return;
@@ -310,9 +313,15 @@ export default function UploadPrompt() {
         }
       }
 
+      const errorMessage = getErrorMessage(error, "An unexpected error occurred");
+      const isLimitError = (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "P0001") ||
+        errorMessage.includes("Daily prompt upload limit");
+
       toast({
-        title: "Upload failed",
-        description: getErrorMessage(error, "An unexpected error occurred"),
+        title: isLimitError ? "Daily upload limit reached" : "Upload failed",
+        description: isLimitError
+          ? "Unverified accounts can upload a maximum of 3 prompts per day. Limit resets at 12:00 AM UTC."
+          : errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -642,6 +651,7 @@ export default function UploadPrompt() {
                 className="w-full text-sm sm:text-base py-2.5 sm:py-3"
                 disabled={
                   isSubmitting ||
+                  isCheckingLimit ||
                   (limitStatus !== null && !limitStatus.isVerified && limitStatus.remaining <= 0) ||
                   !toolUsed ||
                   (toolUsed === "Other" && !customTool.trim()) ||
@@ -653,6 +663,8 @@ export default function UploadPrompt() {
                   ? "Uploading image..."
                   : isSubmitting
                   ? "Saving..."
+                  : isCheckingLimit
+                  ? "Checking upload limit..."
                   : limitStatus && !limitStatus.isVerified && limitStatus.remaining <= 0
                   ? "Daily Limit Reached (3/3)"
                   : "Upload Prompt"}

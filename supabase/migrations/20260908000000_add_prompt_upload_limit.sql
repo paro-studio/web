@@ -7,7 +7,7 @@
 
 create table if not exists public.prompt_uploads (
   id         uuid        primary key default gen_random_uuid(),
-  user_id    uuid        not null references auth.users (id) on delete cascade,
+  user_id    uuid        not null references public.profiles (id) on delete cascade,
   prompt_id  uuid        references public.prompts (id) on delete set null,
   created_at timestamptz not null default now()
 );
@@ -31,6 +31,8 @@ declare
   daily_upload_count integer;
   day_start timestamptz;
 begin
+  perform pg_advisory_xact_lock(hashtext('prompt_upload:' || new.user_id::text));
+
   select coalesce(verified, false) into is_verified
   from public.profiles
   where id = new.user_id;

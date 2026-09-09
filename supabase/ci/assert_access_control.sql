@@ -8,6 +8,7 @@
 --   3. public.follows select policy is not public (using true).
 --   4. public.saves select policy is not private to authenticated owners.
 --   5. public.feedback or public.prompt_reports have any select policy.
+--   6. public.prompt_uploads select policy is not owner-only, or has write policies.
 
 \set ON_ERROR_STOP on
 
@@ -242,3 +243,65 @@ begin
   end if;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 6. public.prompt_uploads: SELECT policy must be owner-only, NO write policies
+-- ---------------------------------------------------------------------------
+--
+-- Prompt upload logs track daily limits for unverified users. Users can inspect
+-- their own upload history, but writes are exclusively managed by the database
+-- trigger (SECURITY DEFINER) on prompt creation.
+
+do $$
+declare
+  pol record;
+  write_pol_count int;
+begin
+  if not exists (
+    select 1 from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'prompt_uploads' and c.relrowsecurity
+  ) then
+    raise exception 'RLS must be enabled on public.prompt_uploads';
+  end if;
+
+  select * into pol
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'prompt_uploads'
+    and cmd = 'SELECT';
+
+  if pol is null then
+    raise exception 'public.prompt_uploads must have a SELECT policy';
+  end if;
+
+  if pol.roles <> '{authenticated}' then
+    raise exception 'public.prompt_uploads SELECT policy must be restricted to authenticated (got: %)', pol.roles;
+  end if;
+
+  if replace(pol.qual, ' ', '') <> '(auth.uid()=user_id)' then
+    raise exception 'public.prompt_uploads SELECT policy must use (auth.uid() = user_id), got: %', pol.qual;
+  end if;
+
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'prompt_uploads'
+      and cmd in ('SELECT', 'ALL')
+      and ('anon' = any(roles) or 'public' = any(roles))
+  ) then
+    raise exception 'public.prompt_uploads must not have any SELECT policy accessible by anon or public';
+  end if;
+
+  select count(*) into write_pol_count
+  from pg_policies
+  where schemaname = 'public'
+    and tablename = 'prompt_uploads'
+    and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL');
+
+  if write_pol_count > 0 then
+    raise exception 'public.prompt_uploads must not have any write policies (got %)', write_pol_count;
+  end if;
+end;
+$$;
+
