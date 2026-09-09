@@ -855,4 +855,3 @@ create policy "Users can view their own prompt uploads"
 -- To set yourself as verified so the badge shows up, run this in the SQL
 -- Editor. It is the only way, the app cannot write that column:
 --   update public.profiles set verified = true where username = 'your_username';
-
