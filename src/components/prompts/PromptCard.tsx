@@ -230,7 +230,7 @@ export function PromptCard({
 
   return (
     <article className="group masonry-item">
-      <div className="relative overflow-hidden rounded-sm bg-card hover-lift">
+      <div className="relative overflow-hidden rounded-xl bg-card hover-lift">
         {/* Image */}
         <Link to={`/prompt/${id}`} className="block">
           <div className="relative aspect-auto">
@@ -387,7 +387,7 @@ export function PromptCard({
           className={cn(
             "absolute top-2 sm:top-3 left-2 sm:left-3 p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 touch-target flex items-center justify-center",
             "opacity-100 lg:opacity-0 lg:group-hover:opacity-100",
-            copied && "bg-gold/90"
+            copied && "bg-green-500/90"
           )}
           title="Copy prompt"
           aria-label={copied ? "Copied" : "Copy prompt"}
