@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.webp";
 import {
   DropdownMenu,
   DropdownMenuContent,
