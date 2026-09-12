@@ -21,6 +21,7 @@ import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
 import { FEATURED_AI_TOOL, OTHER_AI_TOOLS } from "@/lib/aiTools";
 import { checkDailyUploadLimit, type DailyUploadLimitStatus } from "@/services/supabase/prompts";
+import { MAX_SOURCE_SIZE } from "@/services/supabase/storage";
 
 export default function UploadPrompt() {
   const navigate = useNavigate();
@@ -32,8 +33,6 @@ export default function UploadPrompt() {
   const [promptText, setPromptText] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState("");
-  const [useUrl, setUseUrl] = useState(false);
   const [toolUsed, setToolUsed] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -81,11 +80,10 @@ export default function UploadPrompt() {
       return;
     }
 
-    // Validate file size (max 3MB)
-    if (file.size > 3 * 1024 * 1024) {
+    if (file.size > MAX_SOURCE_SIZE) {
       toast({
-        title: "File too large",
-        description: "Image must be less than 3MB",
+        title: "Image too large",
+        description: "That image is too large to process. Please use one under 25MB.",
         variant: "destructive",
       });
       return;
@@ -132,7 +130,7 @@ export default function UploadPrompt() {
     e.preventDefault();
 
     // ===== VALIDATION =====
-    
+
     // 1. Auth check
     if (!user) {
       toast({
@@ -165,17 +163,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 4. Image size check (3MB max - already validated but double-check)
-    if (imageFile.size > 3 * 1024 * 1024) {
-      toast({
-        title: "Image too large",
-        description: "Image must be less than 3MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // 5. Title required
+    // 4. Title required
     if (!title.trim()) {
       toast({
         title: "Title required",
@@ -185,7 +173,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 6. Prompt text required
+    // 5. Prompt text required
     if (!promptText.trim()) {
       toast({
         title: "Prompt required",
@@ -195,7 +183,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 7. AI Tool required
+    // 6. AI Tool required
     const actualTool = getActualToolName();
     if (!actualTool) {
       toast({
@@ -206,7 +194,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 8. Minimum 3 tags
+    // 7. Minimum 3 tags
     if (tags.length < 3) {
       toast({
         title: "More tags needed",
@@ -217,14 +205,27 @@ export default function UploadPrompt() {
     }
 
     // ===== UPLOAD FLOW =====
-    
+
     setIsSubmitting(true);
     let uploadedImageUrl: string | null = null;
 
     try {
       // STEP 1: Upload image to Supabase Storage
       const { uploadPromptImage } = await import('@/services/supabase/storage');
-      const { url, error: uploadError } = await uploadPromptImage(user.id, imageFile);
+
+      let url: string | null = null;
+      let uploadError: string | null = null;
+      setIsUploading(true);
+      try {
+        const result = await uploadPromptImage(
+          user.id,
+          imageFile
+        );
+        url = result.url;
+        uploadError = result.error;
+      } finally {
+        setIsUploading(false);
+      }
 
       if (uploadError || !url) {
         toast({
@@ -239,7 +240,7 @@ export default function UploadPrompt() {
 
       // STEP 2: Insert into database with explicit user_id
       const { createPrompt } = await import('@/services/supabase/prompts');
-      
+
       const { prompt, error: dbError } = await createPrompt({
         user_id: user.id, // CRITICAL: explicit user_id for RLS
         title: title.trim(),
@@ -251,11 +252,11 @@ export default function UploadPrompt() {
 
       if (dbError || !prompt) {
         console.error('❌ Database insert failed:', dbError);
-        
-        // CLEANUP: Delete uploaded image since DB insert failed
+
+        // CLEANUP: Delete uploaded image since DB insert failed (only for stored images)
         const { deletePromptImage } = await import('@/services/supabase/storage');
         await deletePromptImage(uploadedImageUrl);
-        
+
         const isLimitError = dbError?.code === 'P0001' || dbError?.message?.includes('Daily prompt upload limit');
         toast({
           title: isLimitError ? "Daily upload limit reached" : "Upload failed",
@@ -299,11 +300,11 @@ export default function UploadPrompt() {
 
       // Redirect to prompt detail page using the returned ID
       navigate(`/prompt/${prompt.id}`, { replace: true });
-      
+
     } catch (error) {
       console.error('❌ Unexpected upload error:', error);
 
-      // CLEANUP: If we uploaded an image but error occurred, clean it up
+      // CLEANUP: If we uploaded an image to storage but error occurred, clean it up
       if (uploadedImageUrl) {
         try {
           const { deletePromptImage } = await import('@/services/supabase/storage');
@@ -326,6 +327,7 @@ export default function UploadPrompt() {
       });
     } finally {
       setIsSubmitting(false);
+      setIsUploading(false);
     }
   };
 
@@ -401,106 +403,44 @@ export default function UploadPrompt() {
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Image Upload */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm sm:text-base">Image</Label>
+                <Label className="text-sm sm:text-base">Image</Label>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {!imagePreview ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setUseUrl(!useUrl);
-                      setImageFile(null);
-                      setImagePreview(null);
-                      setImageUrl("");
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = "";
-                      }
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-sm flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
                   >
-                    {useUrl ? "Upload file instead" : "Use URL instead"}
+                    <ImageIcon className="h-8 sm:h-10 w-8 sm:w-10 text-muted-foreground" />
+                    <div className="text-center px-4">
+                      <p className="text-xs sm:text-sm font-medium">Click to upload image</p>
+                      <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 3MB</p>
+                    </div>
                   </button>
-                </div>
-
-                {useUrl ? (
-                  <div className="space-y-2">
-                    <Input
-                      type="url"
-                      placeholder="https://example.com/image.jpg"
-                      value={imageUrl}
-                      onChange={(e) => {
-                        setImageUrl(e.target.value);
-                        setImagePreview(e.target.value);
-                      }}
-                      className="bg-secondary/50 border-0 text-sm sm:text-base"
-                    />
-                    {imagePreview && (
-                      <div className="relative">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
-                          onError={() => {
-                            toast({
-                              title: "Invalid image URL",
-                              description: "Could not load image from the provided URL",
-                              variant: "destructive",
-                            });
-                            setImagePreview(null);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setImageUrl("");
-                            setImagePreview(null);
-                          }}
-                          className="absolute top-2 right-2 p-1.5 bg-background/80 rounded-sm hover:bg-background transition-colors touch-target"
-                          aria-label="Clear image"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 ) : (
-                  <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileSelect}
-                      className="hidden"
+                  <div className="relative">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
                     />
-
-                    {!imagePreview ? (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-sm flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
-                      >
-                        <ImageIcon className="h-8 sm:h-10 w-8 sm:w-10 text-muted-foreground" />
-                        <div className="text-center px-4">
-                          <p className="text-xs sm:text-sm font-medium">Click to upload image</p>
-                          <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 5MB</p>
-                        </div>
-                      </button>
-                    ) : (
-                      <div className="relative">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={clearImage}
-                          className="absolute top-2 right-2 p-1.5 bg-background/80 rounded-sm hover:bg-background transition-colors touch-target"
-                          aria-label="Remove image"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </>
+                    <button
+                      type="button"
+                      onClick={clearImage}
+                      className="absolute top-2 right-2 p-1.5 bg-background/80 rounded-sm hover:bg-background transition-colors touch-target"
+                      aria-label="Remove image"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -656,18 +596,18 @@ export default function UploadPrompt() {
                   !toolUsed ||
                   (toolUsed === "Other" && !customTool.trim()) ||
                   tags.length < 3 ||
-                  (useUrl ? !imageUrl.trim() : !imageFile)
+                  !imageFile
                 }
               >
                 {isUploading
                   ? "Uploading image..."
                   : isSubmitting
-                  ? "Saving..."
-                  : isCheckingLimit
-                  ? "Checking upload limit..."
-                  : limitStatus && !limitStatus.isVerified && limitStatus.remaining <= 0
-                  ? "Daily Limit Reached (3/3)"
-                  : "Upload Prompt"}
+                    ? "Saving..."
+                    : isCheckingLimit
+                      ? "Checking upload limit..."
+                      : limitStatus && !limitStatus.isVerified && limitStatus.remaining <= 0
+                        ? "Daily Limit Reached (3/3)"
+                        : "Upload Prompt"}
               </Button>
             </form>
           </div>
