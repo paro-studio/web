@@ -21,6 +21,7 @@ import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
 import { FEATURED_AI_TOOL, OTHER_AI_TOOLS } from "@/lib/aiTools";
 import { checkDailyUploadLimit, type DailyUploadLimitStatus } from "@/services/supabase/prompts";
+import { MAX_SOURCE_SIZE } from "@/services/supabase/storage";
 
 export default function UploadPrompt() {
   const navigate = useNavigate();
@@ -74,6 +75,15 @@ export default function UploadPrompt() {
       toast({
         title: "Invalid file type",
         description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > MAX_SOURCE_SIZE) {
+      toast({
+        title: "Image too large",
+        description: "That image is too large to process. Please use one under 25MB.",
         variant: "destructive",
       });
       return;
@@ -153,7 +163,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 5. Title required
+    // 4. Title required
     if (!title.trim()) {
       toast({
         title: "Title required",
@@ -163,7 +173,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 6. Prompt text required
+    // 5. Prompt text required
     if (!promptText.trim()) {
       toast({
         title: "Prompt required",
@@ -173,7 +183,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 7. AI Tool required
+    // 6. AI Tool required
     const actualTool = getActualToolName();
     if (!actualTool) {
       toast({
@@ -184,7 +194,7 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 8. Minimum 3 tags
+    // 7. Minimum 3 tags
     if (tags.length < 3) {
       toast({
         title: "More tags needed",
