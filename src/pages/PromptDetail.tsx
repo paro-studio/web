@@ -1,6 +1,8 @@
+import { RatingInvitation } from "@/components/prompts/RatingInvitation";
+import { useCopyRatingInvitation } from "@/hooks/useCopyRatingInvitation";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +21,8 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
   const { user, profile } = useAuth();
+  const location = useLocation();
+  const ratingInvitation = useCopyRatingInvitation(id, user?.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [shareOpen, setShareOpen] = useState(false);
@@ -180,6 +184,21 @@ export default function PromptDetail() {
     enabled: !!prompt?.tags && prompt.tags.length > 0,
   });
 
+  const focusRating = () => {
+    const section = document.getElementById("accuracy-rating");
+    section?.scrollIntoView({ block: "center" });
+    section?.focus({ preventScroll: true });
+    ratingInvitation.dismiss();
+  };
+  const loadedPromptId = prompt?.id;
+  useEffect(() => {
+    if (loadedPromptId && location.hash === "#accuracy-rating") {
+      const section = document.getElementById("accuracy-rating");
+      section?.scrollIntoView({ block: "center" });
+      section?.focus({ preventScroll: true });
+    }
+  }, [loadedPromptId, location.hash]);
+
   const handleCopy = async () => {
     if (!prompt) return;
 
@@ -188,8 +207,14 @@ export default function PromptDetail() {
       return;
     }
 
-    await navigator.clipboard.writeText(prompt.promptText);
+    try {
+      await navigator.clipboard.writeText(prompt.promptText);
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy the prompt. Please try again.", variant: "destructive" });
+      return;
+    }
     setCopied(true);
+    void ratingInvitation.afterCopy();
 
     const { incrementCopyCount } = await import('@/services/supabase/prompts');
     await incrementCopyCount(prompt.id);
@@ -276,6 +301,7 @@ export default function PromptDetail() {
       }
 
       setUserRating(rating);
+      ratingInvitation.dismiss();
       setAccuracyRating(ratingInfo.average);
       setRatingCount(ratingInfo.count);
       toast({
@@ -481,8 +507,10 @@ export default function PromptDetail() {
                   </Button>
                 </div>
 
+                {ratingInvitation.visible && <RatingInvitation signedIn={!!user} onRate={focusRating} onSignIn={() => setAuthModalOpen(true)} onDismiss={ratingInvitation.dismiss} />}
+
                 {/* Accuracy Rating Interactive Widget */}
-                <div className="rounded-lg border border-border/80 bg-secondary/30 p-3 sm:p-3.5 space-y-2.5">
+                <div id="accuracy-rating" tabIndex={-1} className="rounded-lg border border-border/80 bg-secondary/30 p-3 sm:p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-full bg-gold/10 text-gold border border-gold/20 flex-shrink-0">
