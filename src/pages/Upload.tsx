@@ -21,7 +21,7 @@ import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
 import { FEATURED_AI_TOOL, OTHER_AI_TOOLS } from "@/lib/aiTools";
 import { checkDailyUploadLimit, type DailyUploadLimitStatus } from "@/services/supabase/prompts";
-import { MAX_SOURCE_SIZE } from "@/services/supabase/storage";
+import { ALLOWED_TYPES, MAX_SOURCE_SIZE } from "@/services/supabase/storage";
 
 export default function UploadPrompt() {
   const navigate = useNavigate();
@@ -71,10 +71,11 @@ export default function UploadPrompt() {
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      clearImage();
       toast({
         title: "Invalid file type",
-        description: "Please select an image file",
+        description: "Please select a JPEG, PNG, or WebP image",
         variant: "destructive",
       });
       return;
@@ -408,7 +409,7 @@ export default function UploadPrompt() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={ALLOWED_TYPES.join(",")}
                   onChange={handleFileSelect}
                   className="hidden"
                 />
