@@ -91,10 +91,7 @@ export function usePrompts(options?: {
     queryFn: async () => {
       const { prompts: allPrompts, error } = await getAllPrompts(limit * 2); // Get more for filtering
 
-      if (error) {
-        console.error('Error fetching prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Enrich in bulk. Doing this per prompt meant 4 extra round trips each,
       // 200+ requests for a 50-prompt feed. These five run once, in parallel,
@@ -163,10 +160,7 @@ export function useTopCreators(limit = 6) {
       // downloaded the full text of 200 prompts just to count them.
       const { userIds, error } = await getRecentPromptCreatorIds(200);
 
-      if (error) {
-        console.error('Error fetching prompts for top creators:', error);
-        return [];
-      }
+      if (error) throw error;
 
       const creatorIds = Array.from(new Set(userIds));
 

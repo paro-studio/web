@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -338,7 +339,7 @@ export default function UploadPrompt() {
       <div className="min-h-screen min-h-[100dvh] bg-background">
         <Navbar />
         <main className="pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 text-center py-12 sm:py-16">
-          <p className="text-sm sm:text-base text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );

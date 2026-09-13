@@ -1,4 +1,5 @@
 import { useSocialMutation } from "@/hooks/useSocialMutation";
+import { QueryError } from "@/components/QueryError";
 
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
@@ -53,7 +54,7 @@ export default function Profile() {
     enabled: !!id,
   });
 
-  const { data: prompts, isLoading: promptsLoading, refetch: refetchPrompts } = useQuery({
+  const { data: prompts, isLoading: promptsLoading, isError: promptsError, isFetching: promptsFetching, refetch: refetchPrompts } = useQuery({
     queryKey: ["profile-prompts", profile?.id, currentUserProfile?.id],
     queryFn: async () => {
       if (!profile?.id) return [];
@@ -61,10 +62,7 @@ export default function Profile() {
       // Get prompts from Supabase
       const { prompts: userPrompts, error } = await getUserPrompts(profile.id);
 
-      if (error) {
-        console.error('Error fetching user prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Sort by newest first
       userPrompts.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -272,7 +270,8 @@ export default function Profile() {
           <div className="max-w-[1920px] mx-auto">
             <h2 className="font-serif text-xl sm:text-2xl mb-4 sm:mb-6">Prompts</h2>
 
-            {promptsLoading ? (
+            {promptsError && <QueryError resource="profile prompts" onRetry={() => { void refetchPrompts(); }} retrying={promptsFetching} />}
+            {promptsError && !prompts ? null : promptsLoading ? (
               <div className="masonry-grid">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="masonry-item">
