@@ -8,6 +8,7 @@ import { getLikeCounts, getLikedPromptIds } from "@/services/supabase/likes";
 import { getSavedPromptIds } from "@/services/supabase/saves";
 import { getPromptRatings } from "@/services/supabase/ratings";
 import { getFollowerCounts } from "@/services/supabase/follows";
+import { promptsQueryKey } from "@/hooks/queryKeys";
 
 export interface PromptWithDetails {
   id: string;
@@ -86,7 +87,7 @@ export function usePrompts(options?: {
 
   return useQuery({
     // The user id is in the key because isLiked and isSaved depend on it.
-    queryKey: ["prompts", limit, user?.id ?? null],
+    queryKey: promptsQueryKey(limit, user?.id),
     queryFn: async () => {
       const { prompts: allPrompts, error } = await getAllPrompts(limit * 2); // Get more for filtering
 

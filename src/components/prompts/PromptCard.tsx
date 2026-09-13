@@ -1,3 +1,4 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Eye, Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
@@ -90,15 +91,17 @@ export function PromptCard({
 }: PromptCardProps) {
   const hasRatings = typeof ratingCount === "number" && ratingCount > 0 && typeof accuracyRating === "number";
   const [copied, setCopied] = useState(false);
-  const [localLiked, setLocalLiked] = useState(isLiked);
-  const [localSaved, setLocalSaved] = useState(isSaved);
-  const [localLikeCount, setLocalLikeCount] = useState(likeCount ?? 0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { user, profile } = useAuth();
+  const likeMutation = useSocialMutation("like", user?.id, id, onLikeChange);
+  const saveMutation = useSocialMutation("save", user?.id, id, onSaveChange);
+  const localLiked = likeMutation.pending?.active ?? isLiked;
+  const localSaved = saveMutation.pending?.active ?? isSaved;
+  const localLikeCount = likeMutation.pending?.count ?? likeCount ?? 0;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { copyPromptLink } = usePromptShare();
@@ -137,18 +140,7 @@ export function PromptCard({
       return;
     }
 
-    const newLiked = !localLiked;
-    setLocalLiked(newLiked);
-    setLocalLikeCount((prev) => (newLiked ? (prev ?? 0) + 1 : Math.max(0, (prev ?? 0) - 1)));
-
-    const { toggleLike } = await import('@/services/supabase/likes');
-    await toggleLike(user.id, id);
-
-    // Invalidate queries to refresh data
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
-    queryClient.invalidateQueries({ queryKey: ['liked-prompts', user.id] });
-
-    onLikeChange?.();
+    likeMutation.toggle(localLiked, localLikeCount);
   };
 
   const handleSave = async (e: React.MouseEvent) => {
@@ -163,21 +155,7 @@ export function PromptCard({
       return;
     }
 
-    const newSaved = !localSaved;
-    setLocalSaved(newSaved);
-
-    const { toggleSave } = await import('@/services/supabase/saves');
-    await toggleSave(user.id, id);
-    
-    // Invalidate queries to refresh data
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
-    queryClient.invalidateQueries({ queryKey: ['saved-prompts', user.id] });
-    
-    if (newSaved) {
-      toast({ title: "Saved to collection" });
-    }
-
-    onSaveChange?.();
+    saveMutation.toggle(localSaved);
   };
 
   const handleCopyLink = async (e: React.MouseEvent) => {
