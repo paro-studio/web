@@ -1,3 +1,5 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { QueryError } from "@/components/QueryError";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark } from "lucide-react";
@@ -11,7 +13,7 @@ export default function Saved() {
   const { user, session, profile, loading } = useAuth();
 
   // Fetch saved prompts from Supabase
-  const { data: savedPrompts, isLoading, refetch } = useQuery({
+  const { data: savedPrompts, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["saved-prompts", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -23,10 +25,7 @@ export default function Saved() {
 
       const { prompts, error } = await getUserSaves(user.id);
       
-      if (error) {
-        console.error('Error fetching saved prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Enrich with creator and like status
       const enriched = await Promise.all(prompts.map(async (p) => {
@@ -71,7 +70,7 @@ export default function Saved() {
       <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col">
         <Navbar />
         <main className="flex-1 pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 text-center py-12 sm:py-16">
-          <p className="text-sm sm:text-base text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
         <Footer />
       </div>
@@ -105,6 +104,7 @@ export default function Saved() {
               <h1 className="font-serif text-2xl sm:text-3xl">Saved Prompts</h1>
             </div>
 
+            {isError && <QueryError resource="saved prompts" onRetry={() => { void refetch(); }} retrying={isFetching} />}
             {isLoading ? (
               <div className="masonry-grid">
                 {[...Array(6)].map((_, i) => (

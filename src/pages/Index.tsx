@@ -1,3 +1,4 @@
+import { QueryError } from "@/components/QueryError";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Sparkles, Plus } from "lucide-react";
@@ -48,7 +49,7 @@ export default function Index() {
     navigate(pending, { replace: true });
   }, [authLoading, user, navigate]);
 
-  const { data: prompts, isLoading: promptsLoading } = usePrompts({
+  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch } = usePrompts({
     selectedTags,
     searchQuery,
     sortBy,
@@ -213,6 +214,7 @@ export default function Index() {
               {sortBy === "most_copied" && "Most Copied Prompts"}
             </h2>
 
+            {isError && <QueryError resource="prompts" onRetry={() => { void refetch(); }} retrying={isFetching} />}
             {promptsLoading ? (
               <div className="masonry-grid">
                 {[...Array(8)].map((_, i) => (
@@ -223,7 +225,7 @@ export default function Index() {
                   </div>
                 ))}
               </div>
-            ) : filteredPrompts.length === 0 ? (
+            ) : isError && !prompts ? null : filteredPrompts.length === 0 ? (
               searchQuery.trim() || selectedTags.length > 0 ? (
                 <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
                   <p className="font-serif text-lg sm:text-xl text-muted-foreground">

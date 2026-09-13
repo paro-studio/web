@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { setPendingRoute } from '@/lib/pendingRoute';
@@ -26,7 +27,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       <div className="min-h-screen bg-background">
         <Navbar />
         <main className="pt-20 container mx-auto px-4 text-center py-16">
-          <p className="text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );

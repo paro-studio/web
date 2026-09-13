@@ -1,3 +1,4 @@
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -56,45 +57,47 @@ const RouteFallback = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Suspense fallback={<RouteFallback />}>
-              <Routes>
-                {/* Complete Profile - accessible to authenticated users with incomplete profiles */}
-                <Route path="/complete-profile" element={<CompleteProfile />} />
+  <AppErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Suspense fallback={<RouteFallback />}>
+                <Routes>
+                  {/* Complete Profile - accessible to authenticated users with incomplete profiles */}
+                  <Route path="/complete-profile" element={<CompleteProfile />} />
 
-                {/* Public Route - home page accessible to everyone */}
-                <Route path="/" element={<Index />} />
-                <Route path="/guidelines" element={<CommunityGuidelines />} />
-                <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+                  {/* Public Route - home page accessible to everyone */}
+                  <Route path="/" element={<Index />} />
+                  <Route path="/guidelines" element={<CommunityGuidelines />} />
+                  <Route path="/community-guidelines" element={<CommunityGuidelines />} />
 
-                {/* Protected Routes - require authentication and username */}
-                <Route path="/originals" element={<ProtectedRoute><ParoOriginals /></ProtectedRoute>} />
-                <Route path="/prompt/:id" element={<ProtectedRoute><PromptDetail /></ProtectedRoute>} />
-                <Route path="/profile/:id" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-                <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-                <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
-                <Route path="/liked" element={<ProtectedRoute><Liked /></ProtectedRoute>} />
-                <Route path="/top-creators" element={<ProtectedRoute><TopCreators /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                <Route path="/earn" element={<ProtectedRoute><EarnWithParo /></ProtectedRoute>} />
-                <Route path="/feedback" element={<ProtectedRoute><Feedback /></ProtectedRoute>} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                {/* Not protected: a wrong URL should show 404, not bounce the
-                    visitor to "/" or into the profile-completion flow. */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+                  {/* Protected Routes - require authentication and username */}
+                  <Route path="/originals" element={<ProtectedRoute><ParoOriginals /></ProtectedRoute>} />
+                  <Route path="/prompt/:id" element={<ProtectedRoute><PromptDetail /></ProtectedRoute>} />
+                  <Route path="/profile/:id" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                  <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
+                  <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
+                  <Route path="/liked" element={<ProtectedRoute><Liked /></ProtectedRoute>} />
+                  <Route path="/top-creators" element={<ProtectedRoute><TopCreators /></ProtectedRoute>} />
+                  <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                  <Route path="/earn" element={<ProtectedRoute><EarnWithParo /></ProtectedRoute>} />
+                  <Route path="/feedback" element={<ProtectedRoute><Feedback /></ProtectedRoute>} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  {/* Not protected: a wrong URL should show 404, not bounce the
+                      visitor to "/" or into the profile-completion flow. */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 );
 
 export default App;
