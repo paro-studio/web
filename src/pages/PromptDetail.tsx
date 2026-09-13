@@ -358,7 +358,7 @@ export default function PromptDetail() {
               </div>
 
               {/* Content - compact layout */}
-              <div className="w-full lg:w-3/5 flex flex-col gap-2.5 sm:gap-3">
+              <div className="min-w-0 w-full lg:w-3/5 flex flex-col gap-2.5 sm:gap-3">
                 {/* Title */}
                 <h1 className="font-serif text-lg sm:text-xl lg:text-2xl leading-tight">
                   {prompt.title}
@@ -417,6 +417,18 @@ export default function PromptDetail() {
                   <span className="text-xs px-2 py-0.5 bg-secondary rounded-sm">
                     {prompt.toolUsed}
                   </span>
+                </div>
+
+                <div className="min-w-0">
+                  <h2 id="prompt-text-heading" className="text-sm font-medium mb-2">Prompt</h2>
+                  <div
+                    role="region"
+                    aria-labelledby="prompt-text-heading"
+                    tabIndex={0}
+                    className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words select-text rounded-sm bg-secondary p-3 text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {prompt.promptText}
+                  </div>
                 </div>
 
                 {/* Actions - Responsive button sizes */}
