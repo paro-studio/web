@@ -152,6 +152,20 @@ export function EditPromptModal({
         throw new Error(error || "Failed to update prompt");
       }
 
+      // The row now points at the replacement. Cleanup must not turn a
+      // successful edit into an error or remove an image still in use.
+      if (imageFile && prompt.image_url && finalImageUrl !== prompt.image_url) {
+        try {
+          const { deletePromptImage } = await import('@/services/supabase/storage');
+          const { error: cleanupError } = await deletePromptImage(prompt.image_url);
+          if (cleanupError) {
+            console.error('Prompt updated but image cleanup failed:', cleanupError);
+          }
+        } catch (cleanupError) {
+          console.error('Prompt updated but image cleanup failed:', cleanupError);
+        }
+      }
+
       toast({ title: "Prompt updated successfully" });
       onUpdated();
       onClose();

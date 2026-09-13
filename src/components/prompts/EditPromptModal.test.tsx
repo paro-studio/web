@@ -5,6 +5,9 @@ import { EditPromptModal } from "./EditPromptModal";
 const updatePrompt = vi.fn();
 const uploadPromptImage = vi.fn();
 const toast = vi.fn();
+const deletePromptImage = vi.fn();
+const onUpdated = vi.fn();
+const onClose = vi.fn();
 
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast }),
@@ -22,6 +25,7 @@ vi.mock("@/services/supabase/prompts", () => ({
 
 vi.mock("@/services/supabase/storage", () => ({
   uploadPromptImage: (...args: unknown[]) => uploadPromptImage(...args),
+  deletePromptImage: (...args: unknown[]) => deletePromptImage(...args),
 }));
 
 const prompt = {
@@ -38,8 +42,8 @@ function renderModal() {
   return render(
     <EditPromptModal
       isOpen
-      onClose={vi.fn()}
-      onUpdated={vi.fn()}
+      onClose={onClose}
+      onUpdated={onUpdated}
       prompt={prompt}
     />,
   );
@@ -62,6 +66,7 @@ function save() {
 describe("EditPromptModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    deletePromptImage.mockReset().mockResolvedValue({ error: null });
     updatePrompt.mockResolvedValue({ prompt: { id: "prompt-1" }, error: null });
     uploadPromptImage.mockResolvedValue({
       url: "https://storage.test/prompt-images/user-1/abc.png",
@@ -109,6 +114,7 @@ describe("EditPromptModal", () => {
 
     await waitFor(() => expect(uploadPromptImage).toHaveBeenCalled());
     expect(updatePrompt).not.toHaveBeenCalled();
+    expect(deletePromptImage).not.toHaveBeenCalled();
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ variant: "destructive" }),
     );
@@ -120,9 +126,57 @@ describe("EditPromptModal", () => {
     save();
 
     await waitFor(() => expect(updatePrompt).toHaveBeenCalled());
+    await waitFor(() => expect(onUpdated).toHaveBeenCalled());
+    expect(deletePromptImage).not.toHaveBeenCalled();
     expect(uploadPromptImage).not.toHaveBeenCalled();
     expect(updatePrompt.mock.calls[0]?.[2].image_url).toBe(
       "https://example.test/original.png",
     );
   });
+
+  it("removes the old image only after the row update succeeds", async () => {
+    let finishUpdate!: (value: unknown) => void;
+    updatePrompt.mockImplementationOnce(() => new Promise(resolve => { finishUpdate = resolve; }));
+    renderModal();
+    chooseImage();
+    save();
+    await waitFor(() => expect(updatePrompt).toHaveBeenCalled());
+    expect(deletePromptImage).not.toHaveBeenCalled();
+    finishUpdate({ prompt: { id: "prompt-1" }, error: null });
+    await waitFor(() => expect(onUpdated).toHaveBeenCalled());
+    expect(deletePromptImage).toHaveBeenCalledExactlyOnceWith(prompt.image_url);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { prompt: null, error: "Database unavailable" },
+    { prompt: null, error: null },
+  ])("keeps the old image when the row is not updated: %j", async result => {
+    updatePrompt.mockResolvedValueOnce(result);
+    renderModal();
+    chooseImage();
+    save();
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Update failed" })));
+    expect(deletePromptImage).not.toHaveBeenCalled();
+    expect(onUpdated).not.toHaveBeenCalled();
+  });
+
+  it.each(["returned", "thrown"])("still completes the edit when cleanup fails (%s)", async failure => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      if (failure === "returned") deletePromptImage.mockResolvedValueOnce({ error: "Storage unavailable" });
+      else deletePromptImage.mockRejectedValueOnce(new Error("Storage unavailable"));
+      renderModal();
+      chooseImage();
+      save();
+      await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+      expect(deletePromptImage).toHaveBeenCalledExactlyOnceWith(prompt.image_url);
+      expect(log).toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledExactlyOnceWith({ title: "Prompt updated successfully" });
+      expect(onUpdated).toHaveBeenCalledOnce();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
 });
