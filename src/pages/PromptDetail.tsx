@@ -19,9 +19,9 @@ import { VerifiedBadge } from "@/components/VerifiedBadge";
 import type { PromptWithDetails } from "@/hooks/usePrompts";
 import { getAllPrompts, getPrompt, incrementCopyCount } from "@/services/supabase/prompts";
 import { getProfile, getProfilesByIds } from "@/services/supabase/profiles";
-import { getLikeCount, getLikedPromptIds, isLiked as checkIsLiked } from "@/services/supabase/likes";
+import { getLikeCount, getLikeCounts, getLikedPromptIds, isLiked as checkIsLiked } from "@/services/supabase/likes";
 import { getSavedPromptIds, isSaved as checkIsSaved } from "@/services/supabase/saves";
-import { getPromptRating, getUserPromptRating } from "@/services/supabase/ratings";
+import { getPromptRating, getPromptRatings, getUserPromptRating } from "@/services/supabase/ratings";
 import { recordViewIfEligible } from "@/lib/viewTracking";
 
 type PromptDetailData = PromptWithDetails & { userRating?: number | null };
@@ -155,18 +155,21 @@ export default function PromptDetail() {
         .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
         .slice(0, 4);
 
-      // Three queries for all of them, rather than three per prompt.
+      // Five queries for all of them, rather than requests from every card.
       const relatedIds = filteredRelated.map((p) => p.id);
-      const [creators, likedIds, savedIds] = await Promise.all([
+      const [creators, likedIds, savedIds, likeCounts, ratings] = await Promise.all([
         getProfilesByIds(filteredRelated.map((p) => p.userId)),
         user ? getLikedPromptIds(user.id, relatedIds) : Promise.resolve(new Set<string>()),
         user ? getSavedPromptIds(user.id, relatedIds) : Promise.resolve(new Set<string>()),
+        getLikeCounts(relatedIds),
+        getPromptRatings(relatedIds),
       ]);
 
       const enrichedRelated = filteredRelated.map((p) => {
           const creator = creators.get(p.userId) ?? null;
           const liked = likedIds.has(p.id);
           const saved = savedIds.has(p.id);
+          const rating = ratings.get(p.id);
 
           // Normalize to clean camelCase UI shape
           return {
@@ -192,9 +195,11 @@ export default function PromptDetail() {
               avatarUrl: null,
               verified: false,
             },
-            likeCount: 0,
+            likeCount: likeCounts.get(p.id) ?? 0,
             isLiked: liked,
-            isSaved: saved
+            isSaved: saved,
+            accuracyRating: rating?.average ?? null,
+            ratingCount: rating?.count ?? 0
           };
       });
 
@@ -613,6 +618,8 @@ export default function PromptDetail() {
                       viewCount={rec.viewCount}
                       copyCount={rec.copyCount}
                       likeCount={rec.likeCount}
+                      accuracyRating={rec.accuracyRating}
+                      ratingCount={rec.ratingCount}
                       creator={rec.creator}
                       tags={rec.tags}
                       isLiked={rec.isLiked}

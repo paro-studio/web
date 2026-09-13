@@ -6,9 +6,10 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PromptCard } from "@/components/prompts/PromptCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getUserLikes } from "@/services/supabase/likes";
+import { getLikeCounts, getUserLikes } from "@/services/supabase/likes";
 import { getProfilesByIds } from "@/services/supabase/profiles";
 import { getSavedPromptIds } from "@/services/supabase/saves";
+import { getPromptRatings } from "@/services/supabase/ratings";
 
 export default function Liked() {
   const { user, session, profile, loading } = useAuth();
@@ -27,16 +28,19 @@ export default function Liked() {
         return [];
       }
 
-      // Enrich with creator and save status
-      // Two queries for the whole page, rather than two per prompt.
-      const [creators, savedIds] = await Promise.all([
+      // Enrich the whole page with bulk lookups rather than per-card requests.
+      const promptIds = prompts.map((p) => p.id);
+      const [creators, savedIds, likeCounts, ratings] = await Promise.all([
         getProfilesByIds(prompts.map((p) => p.userId)),
-        getSavedPromptIds(user.id, prompts.map((p) => p.id)),
+        getSavedPromptIds(user.id, promptIds),
+        getLikeCounts(promptIds),
+        getPromptRatings(promptIds),
       ]);
 
       const enriched = prompts.map((p) => {
         const creator = creators.get(p.userId) ?? null;
         const saved = savedIds.has(p.id);
+        const rating = ratings.get(p.id);
 
         return {
           id: p.id,
@@ -61,9 +65,11 @@ export default function Liked() {
             avatarUrl: null,
             verified: false
           },
-          likeCount: 0, // Will be fetched by PromptCard if needed
+          likeCount: likeCounts.get(p.id) ?? 0,
           isLiked: true, // Always true on this page
-          isSaved: saved
+          isSaved: saved,
+          accuracyRating: rating?.average ?? null,
+          ratingCount: rating?.count ?? 0
         };
       });
 
@@ -137,6 +143,8 @@ export default function Liked() {
                   viewCount={prompt.viewCount}
                   copyCount={prompt.copyCount}
                   likeCount={prompt.likeCount}
+                  accuracyRating={prompt.accuracyRating}
+                  ratingCount={prompt.ratingCount}
                   creator={prompt.creator}
                   tags={prompt.tags}
                   isLiked={prompt.isLiked}
