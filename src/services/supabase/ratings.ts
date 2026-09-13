@@ -81,7 +81,7 @@ export async function getPromptRatings(promptIds: string[]): Promise<Map<string,
 /**
  * Get a user's rating for a specific prompt
  */
-export async function getUserPromptRating(userId: string, promptId: string): Promise<number | null> {
+export async function getUserPromptRating(userId: string, promptId: string, options: { throwOnError?: boolean } = {}): Promise<number | null> {
   if (!userId || !promptId) return null;
 
   try {
@@ -92,12 +92,12 @@ export async function getUserPromptRating(userId: string, promptId: string): Pro
       .eq('prompt_id', promptId)
       .maybeSingle();
 
-    if (error || !data) {
-      return null;
-    }
+    if (error && options.throwOnError) throw error;
+    if (error || !data) return null;
 
     return data.rating ?? null;
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error;
     return null;
   }
 }

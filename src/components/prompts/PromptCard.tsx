@@ -1,7 +1,9 @@
 import { useSocialMutation } from "@/hooks/useSocialMutation";
 import { copyPromptText } from "@/lib/copyPromptText";
+import { RatingInvitation } from "@/components/prompts/RatingInvitation";
+import { useCopyRatingInvitation } from "@/hooks/useCopyRatingInvitation";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -96,6 +98,8 @@ export function PromptCard({
   const [shareOpen, setShareOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const ratingInvitation = useCopyRatingInvitation(id, user?.id);
   const likeMutation = useSocialMutation("like", user?.id, id, onLikeChange);
   const saveMutation = useSocialMutation("save", user?.id, id, onSaveChange);
   const localLiked = likeMutation.pending?.active ?? isLiked;
@@ -118,6 +122,15 @@ export function PromptCard({
     toast({ title: "Sign in required", description: `Please sign in to ${action}` });
   };
 
+  const openRating = () => {
+    if (!user) {
+      if (onLoginRequired) onLoginRequired();
+      else toast({ title: "Sign in required", description: "Please sign in to rate prompts" });
+      return;
+    }
+    navigate(`/prompt/${id}#accuracy-rating`);
+  };
+
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -138,6 +151,7 @@ export function PromptCard({
       return;
     }
     setCopied(true);
+    void ratingInvitation.afterCopy();
 
     // Increment copy count in Supabase
     const { incrementCopyCount } = await import('@/services/supabase/prompts');
@@ -598,25 +612,29 @@ export function PromptCard({
             <span className="tabular-nums">{(localLikeCount ?? 0).toLocaleString()}</span>
           </span>
           {hasRatings ? (
-            <span
+            <button type="button" onClick={openRating}
               className="flex items-center gap-0.5 sm:gap-1 text-gold font-medium"
               title={`Prompt Accuracy: ${accuracyRating.toFixed(1)} / 5.0 (${ratingCount} rating${ratingCount === 1 ? '' : 's'})`}
               aria-label={`Prompt Accuracy: ${accuracyRating.toFixed(1)} out of 5 stars`}
             >
               <Star className="h-3 w-3 fill-gold text-gold" />
               <span className="tabular-nums">{accuracyRating.toFixed(1)}</span>
-            </span>
+            </button>
           ) : (
-            <span
+            <button type="button" onClick={openRating}
               className="flex items-center gap-0.5 sm:gap-1 text-muted-foreground"
               title="Not yet rated"
               aria-label="Not yet rated"
             >
               <Star className="h-3 w-3 text-muted-foreground/50" />
               <span className="text-[11px] sm:text-xs">Not rated</span>
-            </span>
+            </button>
           )}
         </div>
+        {ratingInvitation.visible && <RatingInvitation onRate={() => {
+          ratingInvitation.dismiss();
+          openRating();
+        }} onDismiss={ratingInvitation.dismiss} />}
       </div>
 
       <SharePromptDialog
