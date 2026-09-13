@@ -1,3 +1,4 @@
+import { enrichPrompts } from "@/hooks/enrichPrompts";
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -135,47 +136,7 @@ export default function PromptDetail() {
         .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
         .slice(0, 4);
 
-      const enrichedRelated = await Promise.all(
-        filteredRelated.map(async (p) => {
-          const { getProfile } = await import('@/services/supabase/profiles');
-          const { isLiked: checkIsLiked } = await import('@/services/supabase/likes');
-          const { isSaved: checkIsSaved } = await import('@/services/supabase/saves');
-          
-          const creator = await getProfile(p.userId);
-          const liked = user ? await checkIsLiked(user.id, p.id) : false;
-          const saved = user ? await checkIsSaved(user.id, p.id) : false;
-
-          // Normalize to clean camelCase UI shape
-          return {
-            id: p.id,
-            title: p.title,
-            promptText: p.promptText,
-            imageUrl: p.imageUrl,
-            toolUsed: p.toolUsed,
-            viewCount: p.viewCount || 0,
-            copyCount: p.copyCount || 0,
-            createdAt: p.createdAt || new Date().toISOString(),
-            tags: p.tags || [],
-            creator: creator ? {
-              id: creator.id,
-              username: creator.username ||'unknown',
-              displayName: creator.full_name || creator.username || 'Unknown',
-              avatarUrl: creator.avatar_url,
-              verified: creator.verified ?? false,
-            } : {
-              id: p.userId,
-              username: 'unknown',
-              displayName: 'Unknown User',
-              avatarUrl: null,
-              verified: false,
-            },
-            likeCount: 0,
-            isLiked: liked,
-            isSaved: saved
-          };
-      }));
-
-      return enrichedRelated;
+      return enrichPrompts(filteredRelated, user?.id);
     },
     enabled: !!prompt?.tags && prompt.tags.length > 0,
   });
@@ -606,6 +567,8 @@ export default function PromptDetail() {
                       viewCount={rec.viewCount}
                       copyCount={rec.copyCount}
                       likeCount={rec.likeCount}
+                      accuracyRating={rec.accuracyRating}
+                      ratingCount={rec.ratingCount}
                       creator={rec.creator}
                       tags={rec.tags}
                       isLiked={rec.isLiked}

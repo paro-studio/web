@@ -1,3 +1,4 @@
+import { enrichPrompts } from "@/hooks/enrichPrompts";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Heart } from "lucide-react";
@@ -18,8 +19,6 @@ export default function Liked() {
 
       // Get liked prompts from Supabase
       const { getUserLikes } = await import('@/services/supabase/likes');
-      const { getProfile } = await import('@/services/supabase/profiles');
-      const { isSaved } = await import('@/services/supabase/saves');
 
       const { prompts, error } = await getUserLikes(user.id);
       
@@ -28,41 +27,7 @@ export default function Liked() {
         return [];
       }
 
-      // Enrich with creator and save status
-      const enriched = await Promise.all(prompts.map(async (p) => {
-        const creator = await getProfile(p.userId);
-        const saved = await isSaved(user.id, p.id);
-
-        return {
-          id: p.id,
-          title: p.title,
-          promptText: p.promptText,
-          imageUrl: p.imageUrl,
-          toolUsed: p.toolUsed,
-          viewCount: p.viewCount || 0,
-          copyCount: p.copyCount || 0,
-          createdAt: p.createdAt,
-          tags: p.tags || [],
-          creator: creator ? {
-            id: creator.id,
-            username: creator.username || 'unknown',
-            displayName: creator.full_name || creator.username || 'Unknown',
-            avatarUrl: creator.avatar_url,
-            verified: creator.verified ?? false
-          } : {
-            id: p.userId,
-            username: 'unknown',
-            displayName: 'Unknown User',
-            avatarUrl: null,
-            verified: false
-          },
-          likeCount: 0, // Will be fetched by PromptCard if needed
-          isLiked: true, // Always true on this page
-          isSaved: saved
-        };
-      }));
-
-      return enriched;
+      return enrichPrompts(prompts, user.id);
     },
     enabled: !!user?.id,
   });
@@ -132,6 +97,8 @@ export default function Liked() {
                   viewCount={prompt.viewCount}
                   copyCount={prompt.copyCount}
                   likeCount={prompt.likeCount}
+                  accuracyRating={prompt.accuracyRating}
+                  ratingCount={prompt.ratingCount}
                   creator={prompt.creator}
                   tags={prompt.tags}
                   isLiked={prompt.isLiked}
