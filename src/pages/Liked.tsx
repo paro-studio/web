@@ -1,3 +1,5 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { QueryError } from "@/components/QueryError";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Heart } from "lucide-react";
@@ -11,7 +13,7 @@ export default function Liked() {
   const { user, session, profile, loading } = useAuth();
 
   // Fetch liked prompts from Supabase
-  const { data: likedPrompts, isLoading, refetch } = useQuery({
+  const { data: likedPrompts, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["liked-prompts", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -23,10 +25,7 @@ export default function Liked() {
 
       const { prompts, error } = await getUserLikes(user.id);
       
-      if (error) {
-        console.error('Error fetching liked prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Enrich with creator and save status
       const enriched = await Promise.all(prompts.map(async (p) => {
@@ -73,7 +72,7 @@ export default function Liked() {
       <div className="min-h-screen bg-background">
         <Navbar />
         <main className="pt-20 lg:pt-24 container mx-auto px-4 lg:px-8 text-center py-16">
-          <p className="text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );
@@ -104,7 +103,8 @@ export default function Liked() {
             <h1 className="font-serif text-3xl">Liked Prompts</h1>
           </div>
 
-          {isLoading ? (
+          {isError && <QueryError resource="liked prompts" onRetry={() => { void refetch(); }} retrying={isFetching} />}
+            {isLoading ? (
             <div className="masonry-grid">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="masonry-item">

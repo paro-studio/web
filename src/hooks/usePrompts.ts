@@ -43,10 +43,7 @@ export function usePrompts(options?: {
       const { getAllPrompts } = await import('@/services/supabase/prompts');
       const { prompts: allPrompts, error } = await getAllPrompts(limit * 2); // Get more for filtering
       
-      if (error) {
-        console.error('Error fetching prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Filter by Search Query
       let filtered = allPrompts;
@@ -150,7 +147,7 @@ export function useTags() {
       const { getAllPrompts } = await import('@/services/supabase/prompts');
       const { prompts, error } = await getAllPrompts(100);
       
-      if (error || !prompts) return [];
+      if (error) throw error;
       
       const tagsSet = new Set<string>();
       prompts.forEach(p => {
@@ -171,10 +168,7 @@ export function useTopCreators(limit = 6) {
       const { getFollowerCounts } = await import('@/services/supabase/follows');
       const { prompts, error } = await getAllPrompts(200); // Get more prompts to find top creators
 
-      if (error || !prompts) {
-        console.error('Error fetching prompts for top creators:', error);
-        return [];
-      }
+      if (error) throw error;
 
       const creatorIds = Array.from(new Set(prompts.map(p => p.userId)));
 

@@ -1,3 +1,4 @@
+import { QueryError } from "@/components/QueryError";
 
 import { Link } from "react-router-dom";
 import { Users } from "lucide-react";
@@ -9,7 +10,7 @@ import { useTopCreators } from "@/hooks/usePrompts";
 
 export default function TopCreators() {
   // Fetch top creators using hook
-  const { data: topCreators, isLoading } = useTopCreators(20);
+  const { data: topCreators, isLoading, isError, isFetching, refetch } = useTopCreators(20);
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col">
@@ -23,13 +24,14 @@ export default function TopCreators() {
               <h1 className="font-serif text-2xl sm:text-3xl">Top Creators</h1>
             </div>
 
+            {isError && <QueryError resource="creators" onRetry={() => { void refetch(); }} retrying={isFetching} />}
             {isLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {[...Array(9)].map((_, i) => (
                   <Skeleton key={i} className="h-20 sm:h-24 rounded-sm" />
                 ))}
               </div>
-            ) : !topCreators || topCreators.length === 0 ? (
+            ) : isError && !topCreators ? null : !topCreators || topCreators.length === 0 ? (
               <div className="text-center py-8 sm:py-12">
                 <p className="text-sm sm:text-base text-muted-foreground mb-3 sm:mb-4">No creators yet</p>
                 <Link to="/" className="text-gold hover:underline text-sm sm:text-base">
