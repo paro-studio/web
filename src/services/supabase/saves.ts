@@ -54,11 +54,13 @@ export async function getSavedPromptIds(userId: string, promptIds: string[]): Pr
  */
 export async function toggleSave(userId: string, promptId: string): Promise<{ error: PostgrestError | null }> {
   // Check if already saved
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('saves')
     .select('id')
     .match({ user_id: userId, prompt_id: promptId })
     .maybeSingle();
+
+  if (lookupError) return { error: lookupError };
 
   if (existing) {
     // Unsave

@@ -89,11 +89,13 @@ export async function getFollowingCount(userId: string): Promise<number> {
  */
 export async function toggleFollow(followerId: string, followingId: string): Promise<{ error: PostgrestError | null }> {
   // Check if already following
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('follows')
     .select('id')
     .match({ follower_id: followerId, following_id: followingId })
     .maybeSingle();
+
+  if (lookupError) return { error: lookupError };
 
   if (existing) {
     // Unfollow

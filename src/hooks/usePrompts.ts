@@ -36,8 +36,8 @@ export function usePrompts(options?: {
   const { selectedTags = [], searchQuery = "", sortBy = "trending", limit = 50 } = options || {};
 
   return useQuery({
-    // Stable key - only includes search params, not auth state
-    queryKey: ["prompts", selectedTags, searchQuery, sortBy, limit],
+    // Enrichment contains viewer-specific likes and saves.
+    queryKey: ["prompts", selectedTags, searchQuery, sortBy, limit, user?.id],
     queryFn: async () => {
       // Get all prompts from Supabase
       const { getAllPrompts } = await import('@/services/supabase/prompts');
