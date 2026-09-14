@@ -1,3 +1,4 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -23,12 +24,6 @@ export default function PromptDetail() {
   const { toast } = useToast();
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
-  const [accuracyRating, setAccuracyRating] = useState<number | null>(null);
-  const [ratingCount, setRatingCount] = useState<number>(0);
-  const [userRating, setUserRating] = useState<number | null>(null);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -105,17 +100,20 @@ export default function PromptDetail() {
         userRating: userRatingValue,
       };
 
-      setIsLiked(result.isLiked);
-      setIsSaved(result.isSaved);
-      setLikeCount(result.likeCount);
-      setAccuracyRating(result.accuracyRating);
-      setRatingCount(result.ratingCount);
-      setUserRating(result.userRating);
 
       return result;
     },
     enabled: !!id,
   });
+
+  const likeMutation = useSocialMutation("like", user?.id, id);
+  const saveMutation = useSocialMutation("save", user?.id, id);
+  const isLiked = likeMutation.pending?.active ?? prompt?.isLiked ?? false;
+  const isSaved = saveMutation.pending?.active ?? prompt?.isSaved ?? false;
+  const likeCount = likeMutation.pending?.count ?? prompt?.likeCount ?? 0;
+  const accuracyRating = prompt?.accuracyRating ?? null;
+  const ratingCount = prompt?.ratingCount ?? 0;
+  const userRating = prompt?.userRating ?? null;
 
   // Fetch recommended prompts based on matching tags
   const { data: recommendations } = useQuery({
@@ -211,16 +209,7 @@ export default function PromptDetail() {
 
     if (!prompt) return;
 
-    const newLiked = !isLiked;
-    setIsLiked(newLiked);
-    setLikeCount((prev) => (newLiked ? prev + 1 : prev - 1));
-
-    const { toggleLike } = await import('@/services/supabase/likes');
-    await toggleLike(user.id, prompt.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['prompt', id] });
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
+    likeMutation.toggle(isLiked, likeCount);
   };
 
   const handleSave = async () => {
@@ -234,19 +223,7 @@ export default function PromptDetail() {
 
     if (!prompt) return;
 
-    const newSaved = !isSaved;
-    setIsSaved(newSaved);
-
-    const { toggleSave } = await import('@/services/supabase/saves');
-    await toggleSave(user.id, prompt.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['prompt', id] });
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
-
-    if (newSaved) {
-      toast({ title: "Saved to collection" });
-    }
+    saveMutation.toggle(isSaved);
   };
 
   const handleRate = async (rating: number) => {
@@ -275,9 +252,9 @@ export default function PromptDetail() {
         return;
       }
 
-      setUserRating(rating);
-      setAccuracyRating(ratingInfo.average);
-      setRatingCount(ratingInfo.count);
+      queryClient.setQueryData(["prompt", id, user.id], (current: typeof prompt) => current ? {
+        ...current, userRating: rating, accuracyRating: ratingInfo.average, ratingCount: ratingInfo.count,
+      } : current);
       toast({
         title: "Rating recorded",
         description: `Thank you! You rated this prompt's accuracy ${rating} / 5 stars.`,

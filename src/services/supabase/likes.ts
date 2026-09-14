@@ -95,11 +95,13 @@ export async function getLikedPromptIds(userId: string, promptIds: string[]): Pr
  */
 export async function toggleLike(userId: string, promptId: string): Promise<{ error: PostgrestError | null }> {
   // Check if already liked
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('likes')
     .select('id')
     .match({ user_id: userId, prompt_id: promptId })
     .maybeSingle();
+
+  if (lookupError) return { error: lookupError };
 
   if (existing) {
     // Unlike
