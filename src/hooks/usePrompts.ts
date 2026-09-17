@@ -2,7 +2,7 @@
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { getAllPrompts, getRecentPromptCreatorIds } from "@/services/supabase/prompts";
+import { getAllPrompts, getRecentPromptCreatorIds, searchPrompts } from "@/services/supabase/prompts";
 import { getProfilesByIds } from "@/services/supabase/profiles";
 import { getLikeCounts, getLikedPromptIds } from "@/services/supabase/likes";
 import { getSavedPromptIds } from "@/services/supabase/saves";
@@ -42,16 +42,17 @@ export function usePrompts(options?: {
   const { user, sessionLoading } = useAuth();
   const { selectedTags = [], searchQuery = "", sortBy = "trending", limit = 50 } = options || {};
 
-  // Search, tags and sort all work on the same fetched rows, so they are
-  // applied in `select` rather than being part of the key. Putting them in the
-  // key refetched the whole feed and flashed skeletons on every sort or tag
-  // click, for data that was already in the cache.
+  const trimmedQuery = searchQuery.trim();
+  const isSearch = Boolean(trimmedQuery || selectedTags.length > 0);
   const tagsKey = JSON.stringify(selectedTags);
+
+  // Search queries use server-side full-text search (searchPrompts).
+  // Default feed rows are cached and re-sorted/filtered in memory without refetching.
   const selectFeed = useCallback(
     (allPrompts: PromptWithDetails[]) => {
       let filtered = allPrompts;
 
-      if (searchQuery) {
+      if (!isSearch && searchQuery) {
         const query = searchQuery.toLowerCase();
         filtered = filtered.filter(p =>
           p.title.toLowerCase().includes(query) ||
@@ -81,14 +82,23 @@ export function usePrompts(options?: {
         .slice(0, limit);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [searchQuery, tagsKey, sortBy, limit]
+    [searchQuery, tagsKey, sortBy, limit, isSearch]
   );
 
   return useQuery({
     // The user id is in the key because isLiked and isSaved depend on it.
-    queryKey: ["prompts", limit, user?.id ?? null],
+    // When searching, include query and tags in the key to fetch via searchPrompts.
+    queryKey: isSearch
+      ? ["prompts", "search", trimmedQuery, tagsKey, limit, user?.id ?? null]
+      : ["prompts", limit, user?.id ?? null],
     queryFn: async () => {
-      const { prompts: allPrompts, error } = await getAllPrompts(limit * 2); // Get more for filtering
+      const { prompts: allPrompts, error } = isSearch
+        ? await searchPrompts({
+            query: trimmedQuery || undefined,
+            tags: selectedTags.length > 0 ? selectedTags : undefined,
+            limit: limit * 2,
+          })
+        : await getAllPrompts(limit * 2);
 
       if (error) {
         console.error('Error fetching prompts:', error);
@@ -147,6 +157,7 @@ export function usePrompts(options?: {
       return enrichedPrompts;
     },
     select: selectFeed,
+    placeholderData: (previousData) => previousData,
     // Waits only for the stored session, which is read locally. Waiting on the
     // profile fetch as well held the whole feed back behind two extra round
     // trips it does not need.

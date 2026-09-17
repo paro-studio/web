@@ -88,6 +88,9 @@ export async function checkDailyUploadLimit(
 }
 
 
+export const PROMPT_SELECT_COLUMNS =
+  'id, user_id, title, prompt, image_url, ai_tool, tags, created_at, updated_at, view_count, copy_count';
+
 export interface Prompt {
   id: string;
   user_id: string;
@@ -157,7 +160,7 @@ export async function createPrompt(data: CreatePromptData) {
 export async function getPrompt(id: string) {
   const { data, error } = await supabase
     .from('prompts')
-    .select('*')
+    .select(PROMPT_SELECT_COLUMNS)
     .eq('id', id)
     .single();
 
@@ -180,7 +183,7 @@ export async function getUserPrompts(
 ): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
   const { data, error } = await supabase
     .from('prompts')
-    .select('*')
+    .select(PROMPT_SELECT_COLUMNS)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -215,7 +218,7 @@ export async function getAllPrompts(
 ): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
   const { data, error } = await supabase
     .from('prompts')
-    .select('*')
+    .select(PROMPT_SELECT_COLUMNS)
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -229,6 +232,65 @@ export async function getAllPrompts(
   }
 
   // Normalize to camelCase (match PromptWithDetails shape)
+  const normalizedPrompts: NormalizedPrompt[] = (data || []).map(p => ({
+    id: p.id,
+    userId: p.user_id,
+    title: p.title,
+    promptText: p.prompt,
+    imageUrl: p.image_url,
+    toolUsed: p.ai_tool,
+    tags: p.tags || [],
+    createdAt: p.created_at,
+    viewCount: p.view_count || 0,
+    copyCount: p.copy_count || 0,
+  }));
+
+  return { prompts: normalizedPrompts, error: null };
+}
+
+export interface SearchPromptsOptions {
+  query?: string;
+  tags?: string[];
+  limit?: number;
+}
+
+/**
+ * Search prompts using database full-text search index (prompts_fts_idx)
+ * and tags array index (prompts_tags_idx)
+ */
+export async function searchPrompts(
+  options: SearchPromptsOptions = {}
+): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
+  const { query, tags, limit = 50 } = options;
+
+  let queryBuilder = supabase
+    .from('prompts')
+    .select(PROMPT_SELECT_COLUMNS);
+
+  if (query && query.trim()) {
+    queryBuilder = queryBuilder.textSearch('fts', query.trim(), {
+      config: 'english',
+      type: 'websearch',
+    });
+  }
+
+  if (tags && tags.length > 0) {
+    queryBuilder = queryBuilder.overlaps('tags', tags);
+  }
+
+  const { data, error } = await queryBuilder
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('❌ searchPrompts: Fetch failed:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+    return { prompts: [], error };
+  }
+
   const normalizedPrompts: NormalizedPrompt[] = (data || []).map(p => ({
     id: p.id,
     userId: p.user_id,
