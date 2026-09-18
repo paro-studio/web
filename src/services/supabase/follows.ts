@@ -84,31 +84,21 @@ export async function getFollowingCount(userId: string): Promise<number> {
   return count || 0;
 }
 
-/**
- * Toggle follow status (insert if not exists, delete if exists)
- */
-export async function toggleFollow(followerId: string, followingId: string): Promise<{ error: PostgrestError | null }> {
-  // Check if already following
-  const { data: existing } = await supabase
-    .from('follows')
-    .select('id')
-    .match({ follower_id: followerId, following_id: followingId })
-    .maybeSingle();
-
-  if (existing) {
-    // Unfollow
+/** Set the requested follow state without depending on a possibly stale read. */
+export async function setFollow(followerId: string, followingId: string, active: boolean): Promise<{ error: PostgrestError | null }> {
+  if (!active) {
     const { error } = await supabase
       .from('follows')
       .delete()
       .match({ follower_id: followerId, following_id: followingId });
-    
-    return { error };
-  } else {
-    // Follow
-    const { error } = await supabase
-      .from('follows')
-      .insert({ follower_id: followerId, following_id: followingId });
-    
     return { error };
   }
+
+  const { error } = await supabase
+    .from('follows')
+    .upsert(
+      { follower_id: followerId, following_id: followingId },
+      { onConflict: 'follower_id,following_id', ignoreDuplicates: true },
+    );
+  return { error };
 }

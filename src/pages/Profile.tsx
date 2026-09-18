@@ -1,7 +1,8 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { getProfile } from "@/services/supabase/profiles";
 import { getUserPrompts } from "@/services/supabase/prompts";
@@ -26,10 +27,7 @@ export default function Profile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile: currentUserProfile } = useAuth();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followerCount, setFollowerCount] = useState(0);
   const [editingPrompt, setEditingPrompt] = useState<PromptWithDetails | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
@@ -143,12 +141,9 @@ export default function Profile() {
     enabled: !!profile?.id,
   });
 
-  useEffect(() => {
-    if (followerData) {
-      setFollowerCount(followerData.count);
-      setIsFollowing(followerData.following);
-    }
-  }, [followerData]);
+  const followMutation = useSocialMutation("follow", currentUserProfile?.id, profile?.id);
+  const isFollowing = followMutation.pending?.active ?? followerData?.following ?? false;
+  const followerCount = followMutation.pending?.count ?? followerData?.count ?? 0;
 
   const handleFollow = async () => {
     if (!user) {
@@ -161,15 +156,7 @@ export default function Profile() {
 
     if (!currentUserProfile || !profile?.id) return;
 
-    const newFollowing = !isFollowing;
-    setIsFollowing(newFollowing);
-    setFollowerCount((prev) => (newFollowing ? prev + 1 : prev - 1));
-
-    const { toggleFollow } = await import('@/services/supabase/follows');
-    await toggleFollow(currentUserProfile.id, profile.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['follower-count', profile.id] });
+    followMutation.toggle(isFollowing, followerCount);
   };
 
 
