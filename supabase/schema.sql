@@ -1391,10 +1391,18 @@ create trigger check_prompt_image_url_trigger
 -- fts is read-only and maintained automatically by Postgres on inserts and
 -- updates. Users cannot insert into or update this column directly.
 
+create or replace function public.immutable_array_to_string(arr text[], sep text)
+returns text
+language sql
+immutable
+as $$
+  select array_to_string(arr, sep);
+$$;
+
 alter table public.prompts
   add column if not exists fts tsvector
   generated always as (
-    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(array_to_string(tags, ' '), ''))
+    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(public.immutable_array_to_string(tags, ' '), ''))
   ) stored;
 
 create index if not exists prompts_fts_idx on public.prompts using gin (fts);
