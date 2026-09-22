@@ -95,6 +95,15 @@ export function EditPromptModal({
       return;
     }
 
+    if (promptText.length > 15000) {
+      toast({
+        title: "Prompt too long",
+        description: "Please keep your prompt under 15000 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const actualTool = getActualToolName();
     if (!actualTool.trim()) {
       toast({
@@ -229,6 +238,7 @@ export function EditPromptModal({
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
               placeholder="Enter your prompt"
+              maxLength={15000}
               rows={4}
               className="mt-1"
             />

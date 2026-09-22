@@ -193,10 +193,10 @@ export default function UploadPrompt() {
       return;
     }
 
-    if (promptText.length > 5000) {
+    if (promptText.length > 15000) {
       toast({
         title: "Prompt too long",
-        description: "Please keep your prompt under 5000 characters",
+        description: "Please keep your prompt under 15000 characters",
         variant: "destructive",
       });
       return;
@@ -486,7 +486,7 @@ export default function UploadPrompt() {
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
                   required
-                  maxLength={5000}
+                  maxLength={15000}
                   rows={5}
                   className="bg-secondary/50 border-0 resize-none text-sm sm:text-base min-h-[120px] sm:min-h-[150px]"
                 />
