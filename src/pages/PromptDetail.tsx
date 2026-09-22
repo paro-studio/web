@@ -1,8 +1,9 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
 
-import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "lucide-react";
+import { Eye, Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -15,44 +16,48 @@ import { cn } from "@/lib/utils";
 import { PromptCard } from "@/components/prompts/PromptCard";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import type { PromptWithDetails } from "@/hooks/usePrompts";
+import { getAllPrompts, getPrompt, incrementCopyCount } from "@/services/supabase/prompts";
+import { copyPromptText } from "@/lib/copyPromptText";
+import { getProfile, getProfilesByIds } from "@/services/supabase/profiles";
+import { getLikeCount, getLikeCounts, getLikedPromptIds, isLiked as checkIsLiked } from "@/services/supabase/likes";
+import { getSavedPromptIds, isSaved as checkIsSaved } from "@/services/supabase/saves";
+import { getPromptRating, getPromptRatings, getUserPromptRating } from "@/services/supabase/ratings";
+import { recordViewIfEligible } from "@/lib/viewTracking";
+
+type PromptDetailData = PromptWithDetails & { userRating?: number | null };
 
 export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
-  const [accuracyRating, setAccuracyRating] = useState<number | null>(null);
-  const [ratingCount, setRatingCount] = useState<number>(0);
-  const [userRating, setUserRating] = useState<number | null>(null);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  // Count one view per prompt visited. The ref guards against double-firing
-  // under React StrictMode in development, and against re-counting when the
-  // query refetches — the effect only depends on the id in the URL.
-  const countedViewFor = useRef<string | null>(null);
+  // Count one view per prompt per visitor within the deduplication window (30m).
+  // Deduplication survives back-and-forth navigation, React StrictMode double mounts,
+  // and data refetches.
   useEffect(() => {
-    if (!id || countedViewFor.current === id) return;
-    countedViewFor.current = id;
+    if (!id) return;
 
-    import('@/services/supabase/prompts')
-      .then(({ incrementViewCount }) => incrementViewCount(id))
-      .catch((error) => console.error('Failed to record view:', error));
+    if (recordViewIfEligible(id)) {
+      import('@/services/supabase/prompts')
+        .then(({ incrementViewCount }) => incrementViewCount(id))
+        .catch((error) => console.error('Failed to record view:', error));
+    }
   }, [id]);
 
-  const { data: prompt, isLoading } = useQuery({
+  const { data: prompt, isLoading } = useQuery<PromptDetailData | null>({
     queryKey: ["prompt", id, user?.id],
     queryFn: async () => {
       if (!id) return null;
 
       // Get prompt from Supabase
-      const { getPrompt } = await import('@/services/supabase/prompts');
       const { prompt: data, error } = await getPrompt(id);
       
       if (error || !data) {
@@ -60,24 +65,21 @@ export default function PromptDetail() {
         return null;
       }
 
-      // Get enrichment data from Supabase
-      const { getProfile } = await import('@/services/supabase/profiles');
-      const { getLikeCount, isLiked: checkIsLiked } = await import('@/services/supabase/likes');
-      const { isSaved: checkIsSaved } = await import('@/services/supabase/saves');
-      const { getPromptRating, getUserPromptRating } = await import('@/services/supabase/ratings');
-
-      const creator = await getProfile(data.user_id);
-      const likeCount = await getLikeCount(id);
-      const liked = user ? await checkIsLiked(user.id, id) : false;
-      const saved = user ? await checkIsSaved(user.id, id) : false;
-      const ratingInfo = await getPromptRating(id);
-      const userRatingValue = user ? await getUserPromptRating(user.id, id) : null;
+      // These are independent, so they run together. Awaiting them one by one
+      // stacked six round trips before the page could render.
+      const [creator, likeCount, liked, saved, ratingInfo, userRatingValue] = await Promise.all([
+        getProfile(data.user_id),
+        getLikeCount(id),
+        user ? checkIsLiked(user.id, id) : Promise.resolve(false),
+        user ? checkIsSaved(user.id, id) : Promise.resolve(false),
+        getPromptRating(id),
+        user ? getUserPromptRating(user.id, id) : Promise.resolve(null),
+      ]);
 
       // Normalize to clean camelCase UI shape - NO spread operator
       const result = {
         id: data.id,
         title: data.title,
-        promptText: data.prompt,
         imageUrl: data.image_url,
         toolUsed: data.ai_tool,
         viewCount: data.view_count || 0,
@@ -105,17 +107,40 @@ export default function PromptDetail() {
         userRating: userRatingValue,
       };
 
-      setIsLiked(result.isLiked);
-      setIsSaved(result.isSaved);
-      setLikeCount(result.likeCount);
-      setAccuracyRating(result.accuracyRating);
-      setRatingCount(result.ratingCount);
-      setUserRating(result.userRating);
-
       return result;
     },
+    // Opening a prompt from a grid already has its card data in the cache.
+    // Show that straight away while the full details load behind it.
+    placeholderData: () => {
+      if (!id) return undefined;
+      // Only borrow from lists cached for the same viewer. Their key ends with
+      // the viewer id, and a list from another sign in state carries the wrong
+      // like and save state.
+      const viewer = user?.id ?? null;
+      const lists = [
+        ...queryClient.getQueriesData<PromptWithDetails[]>({ queryKey: ["prompts"] }),
+        ...queryClient.getQueriesData<PromptWithDetails[]>({ queryKey: ["profile-prompts"] }),
+      ].filter(([key]) => (key[key.length - 1] ?? null) === viewer);
+      for (const [, list] of lists) {
+        const match = Array.isArray(list) ? list.find((p) => p.id === id) : undefined;
+        if (match) return match;
+      }
+      return undefined;
+    },
+    // Every fetch hands back a new object, so the local like, save and rating
+    // state below re-syncs after each refetch, even if nothing changed.
+    structuralSharing: false,
     enabled: !!id,
   });
+
+  const likeMutation = useSocialMutation("like", user?.id, id);
+  const saveMutation = useSocialMutation("save", user?.id, id);
+  const isLiked = likeMutation.pending?.active ?? prompt?.isLiked ?? false;
+  const isSaved = saveMutation.pending?.active ?? prompt?.isSaved ?? false;
+  const likeCount = likeMutation.pending?.count ?? prompt?.likeCount ?? 0;
+  const accuracyRating = prompt?.accuracyRating ?? null;
+  const ratingCount = prompt?.ratingCount ?? 0;
+  const userRating = prompt?.userRating ?? null;
 
   // Fetch recommended prompts based on matching tags
   const { data: recommendations } = useQuery({
@@ -124,7 +149,6 @@ export default function PromptDetail() {
       if (!prompt?.tags || prompt.tags.length === 0 || !id) return [];
 
       // Get related prompts from Supabase
-      const { getAllPrompts } = await import('@/services/supabase/prompts');
       const { prompts: relatedPrompts, error: relatedError } = await getAllPrompts(50);
       
       if (relatedError) {
@@ -135,21 +159,26 @@ export default function PromptDetail() {
         .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
         .slice(0, 4);
 
-      const enrichedRelated = await Promise.all(
-        filteredRelated.map(async (p) => {
-          const { getProfile } = await import('@/services/supabase/profiles');
-          const { isLiked: checkIsLiked } = await import('@/services/supabase/likes');
-          const { isSaved: checkIsSaved } = await import('@/services/supabase/saves');
-          
-          const creator = await getProfile(p.userId);
-          const liked = user ? await checkIsLiked(user.id, p.id) : false;
-          const saved = user ? await checkIsSaved(user.id, p.id) : false;
+      // Five queries for all of them, rather than requests from every card.
+      const relatedIds = filteredRelated.map((p) => p.id);
+      const [creators, likedIds, savedIds, likeCounts, ratings] = await Promise.all([
+        getProfilesByIds(filteredRelated.map((p) => p.userId)),
+        user ? getLikedPromptIds(user.id, relatedIds) : Promise.resolve(new Set<string>()),
+        user ? getSavedPromptIds(user.id, relatedIds) : Promise.resolve(new Set<string>()),
+        getLikeCounts(relatedIds),
+        getPromptRatings(relatedIds),
+      ]);
+
+      const enrichedRelated = filteredRelated.map((p) => {
+          const creator = creators.get(p.userId) ?? null;
+          const liked = likedIds.has(p.id);
+          const saved = savedIds.has(p.id);
+          const rating = ratings.get(p.id);
 
           // Normalize to clean camelCase UI shape
           return {
             id: p.id,
             title: p.title,
-            promptText: p.promptText,
             imageUrl: p.imageUrl,
             toolUsed: p.toolUsed,
             viewCount: p.viewCount || 0,
@@ -169,11 +198,13 @@ export default function PromptDetail() {
               avatarUrl: null,
               verified: false,
             },
-            likeCount: 0,
+            likeCount: likeCounts.get(p.id) ?? 0,
             isLiked: liked,
-            isSaved: saved
+            isSaved: saved,
+            accuracyRating: rating?.average ?? null,
+            ratingCount: rating?.count ?? 0
           };
-      }));
+      });
 
       return enrichedRelated;
     },
@@ -188,10 +219,18 @@ export default function PromptDetail() {
       return;
     }
 
-    await navigator.clipboard.writeText(prompt.promptText);
+    // Static import on purpose. Anything awaited before copyPromptText starts
+    // the clipboard write can make Safari treat it as outside the tap.
+    if (!(await copyPromptText(prompt.id))) {
+      toast({
+        title: "Couldn't copy the prompt",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCopied(true);
 
-    const { incrementCopyCount } = await import('@/services/supabase/prompts');
     await incrementCopyCount(prompt.id);
     // Pull the new count back so the displayed number actually moves
     queryClient.invalidateQueries({ queryKey: ["prompt", prompt.id] });
@@ -202,66 +241,37 @@ export default function PromptDetail() {
 
   const handleLike = async () => {
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to like prompts",
-      });
+      setAuthModalOpen(true);
       return;
     }
 
     if (!prompt) return;
 
-    const newLiked = !isLiked;
-    setIsLiked(newLiked);
-    setLikeCount((prev) => (newLiked ? prev + 1 : prev - 1));
-
-    const { toggleLike } = await import('@/services/supabase/likes');
-    await toggleLike(user.id, prompt.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['prompt', id] });
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
+    likeMutation.toggle(isLiked, likeCount);
   };
 
   const handleSave = async () => {
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to save prompts",
-      });
+      setAuthModalOpen(true);
       return;
     }
 
     if (!prompt) return;
 
-    const newSaved = !isSaved;
-    setIsSaved(newSaved);
-
-    const { toggleSave } = await import('@/services/supabase/saves');
-    await toggleSave(user.id, prompt.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['prompt', id] });
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
-
-    if (newSaved) {
-      toast({ title: "Saved to collection" });
-    }
+    saveMutation.toggle(isSaved);
   };
 
   const handleRate = async (rating: number) => {
     if (!user) {
       setAuthModalOpen(true);
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to rate prompt accuracy",
-      });
       return;
     }
 
     if (!prompt || isSubmittingRating) return;
 
     setIsSubmittingRating(true);
+    // Same race as handleLike.
+    await queryClient.cancelQueries({ queryKey: ['prompt', id] });
     try {
       const { ratePrompt } = await import('@/services/supabase/ratings');
       const { ratingInfo, error } = await ratePrompt(user.id, prompt.id, rating);
@@ -275,9 +285,9 @@ export default function PromptDetail() {
         return;
       }
 
-      setUserRating(rating);
-      setAccuracyRating(ratingInfo.average);
-      setRatingCount(ratingInfo.count);
+      queryClient.setQueryData(["prompt", id, user.id], (current: typeof prompt) => current ? {
+        ...current, userRating: rating, accuracyRating: ratingInfo.average, ratingCount: ratingInfo.count,
+      } : current);
       toast({
         title: "Rating recorded",
         description: `Thank you! You rated this prompt's accuracy ${rating} / 5 stars.`,
@@ -302,7 +312,7 @@ export default function PromptDetail() {
         <Navbar />
         <main className="pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8">
           <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row gap-4 sm:gap-6 items-start py-4">
-            <Skeleton className="w-full lg:w-2/5 aspect-square rounded-sm" />
+            <Skeleton className="w-full lg:w-2/5 aspect-square rounded-xl" />
             <div className="w-full lg:w-3/5 space-y-3 sm:space-y-4">
               <Skeleton className="h-6 sm:h-8 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
@@ -336,9 +346,21 @@ export default function PromptDetail() {
         {/* Main content section - compact to show recommendations without scroll */}
         <section className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6">
           <div className="max-w-[1400px] mx-auto">
-            {/* Back button */}
+            {/* Back button. A real history back when the visitor came from
+                inside the app, so the feed returns to where they were
+                scrolled. Linking to "/" opened the feed fresh, at the top.
+                Opened straight from a shared link there is nothing to go back
+                to, so it still goes home. */}
             <Link
               to="/"
+              onClick={(e) => {
+                const isPlainClick = e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+                const hasAppHistory = (window.history.state?.idx ?? 0) > 0;
+                if (isPlainClick && hasAppHistory) {
+                  e.preventDefault();
+                  navigate(-1);
+                }
+              }}
               className="inline-flex items-center gap-1.5 sm:gap-2 text-muted-foreground hover:text-foreground transition-colors mb-3 sm:mb-4 text-sm"
             >
               <ArrowLeft className="h-3.5 sm:h-4 w-3.5 sm:w-4" />
@@ -352,7 +374,7 @@ export default function PromptDetail() {
                 <img
                   src={prompt.imageUrl}
                   alt={prompt.title}
-                  className="max-h-[40vh] sm:max-h-[35vh] lg:max-h-[50vh] w-auto max-w-full object-contain rounded-sm shadow-card"
+                  className="max-h-[40vh] sm:max-h-[35vh] lg:max-h-[50vh] w-auto max-w-full object-contain rounded-xl shadow-card"
                   loading="lazy"
                 />
               </div>
@@ -388,6 +410,10 @@ export default function PromptDetail() {
 
                 {/* Stats */}
                 <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1" title="Views">
+                    <Eye className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
+                    <span className="tabular-nums">{(prompt.viewCount || 0).toLocaleString()}</span>
+                  </span>
                   <span className="flex items-center gap-1" title="Copies">
                     <Copy className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                     <span className="tabular-nums">{prompt.copyCount.toLocaleString()}</span>
@@ -425,8 +451,8 @@ export default function PromptDetail() {
                     onClick={handleCopy}
                     size="default"
                     className={cn(
-                      "gap-1.5 sm:gap-2 text-sm",
-                      copied && "bg-gold text-gold-foreground"
+                      "gap-1.5 sm:gap-2 text-sm transition-colors",
+                      copied && "bg-success hover:bg-success text-success-foreground hover:text-success-foreground"
                     )}
                   >
                     {copied ? (
@@ -482,7 +508,7 @@ export default function PromptDetail() {
                 </div>
 
                 {/* Accuracy Rating Interactive Widget */}
-                <div className="rounded-lg border border-border/80 bg-secondary/30 p-3 sm:p-3.5 space-y-2.5">
+                <div className="rounded-xl border border-border/80 bg-secondary/30 p-3 sm:p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-full bg-gold/10 text-gold border border-gold/20 flex-shrink-0">
@@ -583,17 +609,18 @@ export default function PromptDetail() {
                 <h2 className="font-serif text-lg sm:text-xl mb-3 sm:mb-4">More like this</h2>
 
                 <div className="masonry-grid">
-                  {recommendations.slice(0, 8).map((rec) => (
+                  {recommendations.map((rec) => (
                     <PromptCard
                       key={rec.id}
                       id={rec.id}
                       title={rec.title}
-                      promptText={rec.promptText}
                       imageUrl={rec.imageUrl}
                       toolUsed={rec.toolUsed}
                       viewCount={rec.viewCount}
                       copyCount={rec.copyCount}
                       likeCount={rec.likeCount}
+                      accuracyRating={rec.accuracyRating}
+                      ratingCount={rec.ratingCount}
                       creator={rec.creator}
                       tags={rec.tags}
                       isLiked={rec.isLiked}

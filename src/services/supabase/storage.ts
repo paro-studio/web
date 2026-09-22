@@ -20,9 +20,9 @@ const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 
 // Checked before decoding. Decoding something enormous can lock up the tab, so
 // this rejects the pathological case before we touch it. Deliberately generous.
-const MAX_SOURCE_SIZE = 25 * 1024 * 1024; // 25MB
+export const MAX_SOURCE_SIZE = 25 * 1024 * 1024; // 25MB
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 // Storage path extensions, keyed by MIME type so the path never contains
 // anything taken from a user supplied filename.
@@ -91,8 +91,8 @@ export async function uploadAvatar(userId: string, file: File): Promise<UploadRe
     }
 
     // Fixed path, overwritten each time. The extension stays .jpg for the sake
-    // of deleteAvatar and any URL already stored on a profile; what the browser
-    // actually serves is decided by contentType below.
+    // of any URL already stored on a profile; what the browser actually
+    // serves is decided by contentType below.
     const filePath = `${userId}/avatar.jpg`;
 
 
@@ -199,41 +199,6 @@ export async function uploadBanner(userId: string, file: File): Promise<UploadRe
   }
 }
 
-/**
- * Delete avatar from storage (optional - for cleanup)
- */
-export async function deleteAvatar(userId: string): Promise<{ error: string | null }> {
-  const filePath = `${userId}/avatar.jpg`;
-  
-  const { error } = await supabase.storage
-    .from(AVATAR_BUCKET)
-    .remove([filePath]);
-
-  if (error) {
-    console.error('❌ Failed to delete avatar:', error);
-    return { error: getErrorMessage(error) };
-  }
-
-  return { error: null };
-}
-
-/**
- * Delete banner from storage (optional - for cleanup)
- */
-export async function deleteBanner(userId: string): Promise<{ error: string | null }> {
-  const filePath = `${userId}/banner.jpg`;
-  
-  const { error } = await supabase.storage
-    .from(BANNER_BUCKET)
-    .remove([filePath]);
-
-  if (error) {
-    console.error('❌ Failed to delete banner:', error);
-    return { error: getErrorMessage(error) };
-  }
-
-  return { error: null };
-}
 
 /**
  * Upload prompt image to Supabase Storage

@@ -11,6 +11,7 @@
 [Contributing](CONTRIBUTING.md) &nbsp;·&nbsp;
 [Report a bug](https://github.com/paro-studio/web/issues/new?template=bug_report.yml)
 
+[![Mintlify OSS Program 2026](https://img.shields.io/badge/Mintlify-OSS%20Program%202026-0D9373.svg)](https://mintlify.com/customers)
 [![CI](https://github.com/paro-studio/web/actions/workflows/ci.yml/badge.svg)](https://github.com/paro-studio/web/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -84,7 +85,13 @@ You need your own Supabase project. It is free and takes a few minutes.
 1. Create a project at [supabase.com](https://supabase.com)
 2. Open the SQL Editor, paste in [`supabase/schema.sql`](supabase/schema.sql),
    and run it. That creates every table, policy, function, and storage bucket
-3. Go to Authentication, Providers, and enable Email
+3. Enable Google under Authentication, Providers, following the
+   [Supabase Google OAuth setup guide](https://supabase.com/docs/guides/auth/social-login/auth-google).
+   Configure your Google OAuth client with the Supabase callback URL and save its
+   client ID and secret in the Supabase Google provider settings.
+   Under Authentication, URL Configuration, allow the app's return URL
+   (`http://localhost:8080/` for the default dev server, or your deployed origin
+   with a trailing slash). See [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
 4. Go to Settings, API, and copy the Project URL and anon key into `.env.local`
 
 `npm run dev` should now work end to end. The file contains structure only, so
@@ -98,10 +105,11 @@ work on. To fill it:
 1. Sign up in the app and pick a username
 2. Run [`supabase/seed.sql`](supabase/seed.sql) in the SQL Editor
 
-That adds six sample prompts to the account you just made, fills in an avatar
-and banner, and marks it verified so the badge shows. Images come from a free
-placeholder service. Safe to run more than once, and it only ever touches its
-own rows.
+That adds six sample prompts to the account you just made, fills in a name and
+bio, and marks it verified so the badge shows. Prompt images come from a free
+placeholder service. Your avatar comes from Google, and you can upload a banner
+from Settings. Safe to run more than once, and it only ever touches its own
+rows.
 
 Development only. Never run it against production.
 
@@ -122,8 +130,8 @@ Development only. Never run it against production.
 Files are stored as `{user_id}/{file}`, and the policies use that first path
 segment to decide who owns a file.
 
-**Auth:** email and password, plus Google sign in. New users are sent to
-`/complete-profile` until they pick a username.
+**Auth:** Google sign in only. Email/password authentication is not supported.
+New users are sent to `/complete-profile` until they pick a username.
 
 Row Level Security is on for every table, and privileged columns are restricted
 with column level grants on top of that. The anon key is public, so those two
@@ -205,6 +213,11 @@ on.
 
 Found a security problem? See [SECURITY.md](SECURITY.md). Please do not open a
 public issue for those.
+
+## Backed by
+
+Paro Studio is part of the [Mintlify Open Source Program 2026](https://mintlify.com/customers).
+Our docs are powered by [Mintlify](https://mintlify.com).
 
 ## License
 

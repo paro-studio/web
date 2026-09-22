@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Sparkles } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { Sparkles, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { peekPendingRoute, clearPendingRoute } from "@/lib/pendingRoute";
 import { STANDARD_TAGS } from "@/lib/standardTags";
@@ -10,22 +10,30 @@ import { FeedCard } from "@/components/feed";
 import { TagFilter } from "@/components/prompts/TagFilter";
 import { usePrompts } from "@/hooks/usePrompts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { FeedItem, toImageFeedItem, injectAdvertisements } from "@/lib/feedTypes";
 import { AuthModal } from "@/components/auth/AuthModal";
 
 type SortOption = "trending" | "newest" | "most_copied";
+const SORT_OPTIONS: SortOption[] = ["trending", "newest", "most_copied"];
 
 export default function Index() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [searchQuery, setSearchQuery] = useState("");
+  // Search and sort live in the URL alongside tags. As component state they
+  // reset whenever the feed remounted, so opening a prompt and going back
+  // put a Newest or searched feed back to Trending, and the restored scroll
+  // position pointed at different prompts.
+  const searchQuery = searchParams.get("q") ?? "";
+  const sortParam = searchParams.get("sort");
+  const sortBy: SortOption = SORT_OPTIONS.includes(sortParam as SortOption)
+    ? (sortParam as SortOption)
+    : "trending";
   const selectedTags = useMemo(
     () => [...new Set(searchParams.getAll("tag"))],
     [searchParams]
   );
-  const [sortBy, setSortBy] = useState<SortOption>("trending");
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -55,9 +63,6 @@ export default function Index() {
 
   // Always use fixed predefined tags - never changes based on user uploads
   const displayTags = [...STANDARD_TAGS];
-  // Mobile tags - exclude solo, landscape, fashion, product shot (fits in 2 rows)
-  const mobileExcludedTags = ["solo", "landscape", "fashion", "product shot"];
-  const mobileTags = displayTags.filter(tag => !mobileExcludedTags.includes(tag));
 
   // Filter prompts by search and tags
   const filteredPrompts = useMemo(() => {
@@ -68,7 +73,6 @@ export default function Index() {
       result = result.filter(
         (p) =>
           p.title.toLowerCase().includes(query) ||
-          p.promptText.toLowerCase().includes(query) ||  // camelCase
           p.tags.some((tag) => tag.toLowerCase().includes(query))
       );
     }
@@ -120,6 +124,21 @@ export default function Index() {
     setSearchParams(nextParams, { replace: true });
   };
 
+  const setSearchQuery = (query: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (query) nextParams.set("q", query);
+    else nextParams.delete("q");
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const setSortBy = (sort: SortOption) => {
+    const nextParams = new URLSearchParams(searchParams);
+    // Trending is the default, so it keeps the URL clean.
+    if (sort === "trending") nextParams.delete("sort");
+    else nextParams.set("sort", sort);
+    setSearchParams(nextParams, { replace: true });
+  };
+
   // Convert filtered prompts to FeedItem format and prepare for future ad injection
   const feedItems: FeedItem[] = useMemo(() => {
     const imageItems = filteredPrompts.map(toImageFeedItem);
@@ -138,7 +157,6 @@ export default function Index() {
         key={item.type === "image" ? item.data.id : item.data.id}
         item={item}
         onLoginRequired={() => setAuthModalOpen(true)}
-        onDelete={() => setRefreshKey(prev => prev + 1)}
         // Enough to cover the first row on desktop and the first screen on
         // mobile. One of these is the largest contentful paint, and lazy
         // loading it was costing seconds. Everything below still lazy loads.
@@ -160,16 +178,16 @@ export default function Index() {
       <main className="flex-1 pt-14 sm:pt-16 lg:pt-20">
         {/* Mobile: PARO Originals (replaces Browse by tags) */}
         <section className="md:hidden px-4 py-4 sm:py-6">
-          <a
-            href="/originals"
-            className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
+          <Link
+            to="/originals"
+            className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
           >
             <div className="flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-4 sm:h-5 w-4 sm:w-5 text-[hsl(var(--gold))]" />
               <span className="font-serif text-base sm:text-lg">PARO Originals</span>
             </div>
             <span className="text-xs sm:text-sm text-muted-foreground">Coming Soon</span>
-          </a>
+          </Link>
         </section>
 
         {/* Tablet & Desktop: Tag Filter Section */}
@@ -216,21 +234,56 @@ export default function Index() {
               <div className="masonry-grid">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="masonry-item">
-                    <Skeleton className="aspect-[3/4] rounded-sm" />
+                    <Skeleton className="aspect-[3/4] rounded-xl" />
                     <Skeleton className="h-5 sm:h-6 mt-2 sm:mt-3 w-3/4" />
                     <Skeleton className="h-3 sm:h-4 mt-1.5 sm:mt-2 w-1/2" />
                   </div>
                 ))}
               </div>
             ) : filteredPrompts.length === 0 ? (
-              <div className="text-center py-12 sm:py-16">
-                <p className="font-serif text-lg sm:text-xl text-muted-foreground">
-                  No prompts found
-                </p>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                  Try adjusting your search or filters
-                </p>
-              </div>
+              searchQuery.trim() || selectedTags.length > 0 ? (
+                <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
+                  <p className="font-serif text-lg sm:text-xl text-muted-foreground">
+                    No prompts found
+                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                    Try adjusting your search or filters
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // One update: two back to back would each start from
+                      // the same old params, and the second would undo the first.
+                      const nextParams = new URLSearchParams(searchParams);
+                      nextParams.delete("q");
+                      nextParams.delete("tag");
+                      setSearchParams(nextParams, { replace: true });
+                    }}
+                    className="mt-4"
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-4 text-muted-foreground">
+                    <Sparkles className="h-6 w-6 text-gold" />
+                  </div>
+                  <h3 className="font-serif text-xl sm:text-2xl mb-2">
+                    No prompts yet
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Be the first to share your creative prompt and inspire the community.
+                  </p>
+                  <Button asChild size="default" className="gap-2">
+                    <Link to="/upload">
+                      <Plus className="h-4 w-4" />
+                      Post a prompt
+                    </Link>
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="masonry-grid">
                 {renderFeed()}

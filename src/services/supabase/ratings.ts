@@ -121,7 +121,6 @@ export async function ratePrompt(
         user_id: userId,
         prompt_id: promptId,
         rating: normalizedRating,
-        updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,prompt_id' }
     );

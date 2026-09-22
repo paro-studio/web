@@ -111,4 +111,23 @@ describe("Navbar Dropdown Menus", () => {
     expect(earnSpan?.className).toContain("group-hover:text-black");
     expect(earnSpan?.className).toContain("group-focus:text-black");
   });
+
+  it("renders Support link pointing to support@parostudios.in in mobile dropdown", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    const mobileSection = container.querySelector(".flex.lg\\:hidden");
+    const mobileAvatarButton = mobileSection?.querySelectorAll("button")[1];
+    expect(mobileAvatarButton).toBeDefined();
+
+    fireEvent.pointerDown(mobileAvatarButton!, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(mobileAvatarButton!, { key: "ArrowDown" });
+
+    const supportLink = screen.getByRole("menuitem", { name: /support/i });
+    expect(supportLink).toBeDefined();
+    expect(supportLink.getAttribute("href")).toBe("mailto:support@parostudios.in");
+  });
 });

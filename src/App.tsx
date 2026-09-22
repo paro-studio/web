@@ -1,6 +1,5 @@
 import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -8,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { Loader2 } from "lucide-react";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute";
+import { ScrollManager } from "@/components/routing/ScrollManager";
 
 // The feed is what most visits land on, so it ships in the main bundle. Paying
 // an extra round trip to fetch it as a chunk would slow down the common case.
@@ -61,8 +61,8 @@ const App = () => (
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
-          <Sonner />
           <BrowserRouter>
+            <ScrollManager />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 {/* Complete Profile - accessible to authenticated users with incomplete profiles */}
@@ -73,10 +73,15 @@ const App = () => (
                 <Route path="/guidelines" element={<CommunityGuidelines />} />
                 <Route path="/community-guidelines" element={<CommunityGuidelines />} />
 
+                {/* Open to everyone so shared links work. The prompt text itself is
+                    still sign in only: it is never loaded for signed out visitors,
+                    and the database refuses the column to them. Copy, like, save,
+                    follow and rate ask for sign in on the page. */}
+                <Route path="/prompt/:id" element={<PromptDetail />} />
+                <Route path="/profile/:id" element={<Profile />} />
+
                 {/* Protected Routes - require authentication and username */}
                 <Route path="/originals" element={<ProtectedRoute><ParoOriginals /></ProtectedRoute>} />
-                <Route path="/prompt/:id" element={<ProtectedRoute><PromptDetail /></ProtectedRoute>} />
-                <Route path="/profile/:id" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
                 <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
                 <Route path="/liked" element={<ProtectedRoute><Liked /></ProtectedRoute>} />

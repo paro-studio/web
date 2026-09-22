@@ -6,6 +6,10 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PromptCard } from "@/components/prompts/PromptCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getUserSaves } from "@/services/supabase/saves";
+import { getProfilesByIds } from "@/services/supabase/profiles";
+import { getLikeCounts, getLikedPromptIds } from "@/services/supabase/likes";
+import { getPromptRatings } from "@/services/supabase/ratings";
 
 export default function Saved() {
   const { user, session, profile, loading } = useAuth();
@@ -17,10 +21,6 @@ export default function Saved() {
       if (!user?.id) return [];
 
       // Get saved prompts from Supabase
-      const { getUserSaves } = await import('@/services/supabase/saves');
-      const { getProfile } = await import('@/services/supabase/profiles');
-      const { isLiked } = await import('@/services/supabase/likes');
-
       const { prompts, error } = await getUserSaves(user.id);
       
       if (error) {
@@ -28,15 +28,23 @@ export default function Saved() {
         return [];
       }
 
-      // Enrich with creator and like status
-      const enriched = await Promise.all(prompts.map(async (p) => {
-        const creator = await getProfile(p.userId);
-        const liked = await isLiked(user.id, p.id);
+      // Enrich the whole page with bulk lookups rather than per-card requests.
+      const promptIds = prompts.map((p) => p.id);
+      const [creators, likedIds, likeCounts, ratings] = await Promise.all([
+        getProfilesByIds(prompts.map((p) => p.userId)),
+        getLikedPromptIds(user.id, promptIds),
+        getLikeCounts(promptIds),
+        getPromptRatings(promptIds),
+      ]);
+
+      const enriched = prompts.map((p) => {
+        const creator = creators.get(p.userId) ?? null;
+        const liked = likedIds.has(p.id);
+        const rating = ratings.get(p.id);
 
         return {
           id: p.id,
           title: p.title,
-          promptText: p.promptText,
           imageUrl: p.imageUrl,
           toolUsed: p.toolUsed,
           viewCount: p.viewCount || 0,
@@ -47,18 +55,22 @@ export default function Saved() {
             id: creator.id,
             username: creator.username || 'unknown',
             displayName: creator.full_name || creator.username || 'Unknown',
-            avatarUrl: creator.avatar_url
+            avatarUrl: creator.avatar_url,
+            verified: creator.verified ?? false
           } : {
             id: p.userId,
             username: 'unknown',
             displayName: 'Unknown User',
-            avatarUrl: null
+            avatarUrl: null,
+            verified: false
           },
-          likeCount: 0, // Will be fetched by PromptCard if needed
+          likeCount: likeCounts.get(p.id) ?? 0,
           isLiked: liked,
-          isSaved: true // Always true on this page
+          isSaved: true, // Always true on this page
+          accuracyRating: rating?.average ?? null,
+          ratingCount: rating?.count ?? 0
         };
-      }));
+      });
 
       return enriched;
     },
@@ -109,7 +121,7 @@ export default function Saved() {
               <div className="masonry-grid">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="masonry-item">
-                    <Skeleton className="aspect-[3/4] rounded-sm" />
+                    <Skeleton className="aspect-[3/4] rounded-xl" />
                   </div>
                 ))}
               </div>
@@ -127,12 +139,13 @@ export default function Saved() {
                     key={prompt.id}
                     id={prompt.id}
                     title={prompt.title}
-                    promptText={prompt.promptText}
                     imageUrl={prompt.imageUrl}
                     toolUsed={prompt.toolUsed}
                     viewCount={prompt.viewCount}
                     copyCount={prompt.copyCount}
                     likeCount={prompt.likeCount}
+                    accuracyRating={prompt.accuracyRating}
+                    ratingCount={prompt.ratingCount}
                     creator={prompt.creator}
                     tags={prompt.tags}
                     isLiked={prompt.isLiked}

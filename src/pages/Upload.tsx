@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
@@ -16,10 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { X, ImageIcon, TrendingUp } from "lucide-react";
+import { X, ImageIcon, TrendingUp, AlertCircle, Clock, ShieldCheck } from "lucide-react";
 import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
 import { FEATURED_AI_TOOL, OTHER_AI_TOOLS } from "@/lib/aiTools";
+import { checkDailyUploadLimit, type DailyUploadLimitStatus } from "@/services/supabase/prompts";
+import { ALLOWED_TYPES, MAX_SOURCE_SIZE } from "@/services/supabase/storage";
 
 export default function UploadPrompt() {
   const navigate = useNavigate();
@@ -31,14 +33,30 @@ export default function UploadPrompt() {
   const [promptText, setPromptText] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState("");
-  const [useUrl, setUseUrl] = useState(false);
   const [toolUsed, setToolUsed] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [customTool, setCustomTool] = useState("");
+  const [limitStatus, setLimitStatus] = useState<DailyUploadLimitStatus | null>(null);
+  const [isCheckingLimit, setIsCheckingLimit] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      setIsCheckingLimit(true);
+      checkDailyUploadLimit(user.id, profile?.verified)
+        .then((status) => {
+          setLimitStatus(status);
+        })
+        .catch((err) => {
+          console.error("Failed to check upload limit:", err);
+        })
+        .finally(() => {
+          setIsCheckingLimit(false);
+        });
+    }
+  }, [user, profile?.verified]);
 
   // Get the actual tool name for submission
   const getActualToolName = () => {
@@ -53,20 +71,20 @@ export default function UploadPrompt() {
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      clearImage();
       toast({
         title: "Invalid file type",
-        description: "Please select an image file",
+        description: "Please select a JPEG, PNG, or WebP image",
         variant: "destructive",
       });
       return;
     }
 
-    // Validate file size (max 3MB)
-    if (file.size > 3 * 1024 * 1024) {
+    if (file.size > MAX_SOURCE_SIZE) {
       toast({
-        title: "File too large",
-        description: "Image must be less than 3MB",
+        title: "Image too large",
+        description: "That image is too large to process. Please use one under 25MB.",
         variant: "destructive",
       });
       return;
@@ -113,7 +131,7 @@ export default function UploadPrompt() {
     e.preventDefault();
 
     // ===== VALIDATION =====
-    
+
     // 1. Auth check
     if (!user) {
       toast({
@@ -124,21 +142,23 @@ export default function UploadPrompt() {
       return;
     }
 
-    // 2. Image required
-    if (!imageFile) {
+    // 2. Check daily upload limit for unverified accounts
+    const currentLimit = await checkDailyUploadLimit(user.id, profile?.verified);
+    setLimitStatus(currentLimit);
+    if (!currentLimit.canUpload) {
       toast({
-        title: "Image required",
-        description: "Please select an image to upload",
+        title: "Daily upload limit reached",
+        description: "Unverified accounts can upload a maximum of 3 prompts per day. Limit resets at 12:00 AM UTC.",
         variant: "destructive",
       });
       return;
     }
 
-    // 3. Image size check (3MB max - already validated but double-check)
-    if (imageFile.size > 3 * 1024 * 1024) {
+    // 3. Image required
+    if (!imageFile) {
       toast({
-        title: "Image too large",
-        description: "Image must be less than 3MB",
+        title: "Image required",
+        description: "Please select an image to upload",
         variant: "destructive",
       });
       return;
@@ -186,14 +206,27 @@ export default function UploadPrompt() {
     }
 
     // ===== UPLOAD FLOW =====
-    
+
     setIsSubmitting(true);
     let uploadedImageUrl: string | null = null;
 
     try {
       // STEP 1: Upload image to Supabase Storage
       const { uploadPromptImage } = await import('@/services/supabase/storage');
-      const { url, error: uploadError } = await uploadPromptImage(user.id, imageFile);
+
+      let url: string | null = null;
+      let uploadError: string | null = null;
+      setIsUploading(true);
+      try {
+        const result = await uploadPromptImage(
+          user.id,
+          imageFile
+        );
+        url = result.url;
+        uploadError = result.error;
+      } finally {
+        setIsUploading(false);
+      }
 
       if (uploadError || !url) {
         toast({
@@ -208,7 +241,7 @@ export default function UploadPrompt() {
 
       // STEP 2: Insert into database with explicit user_id
       const { createPrompt } = await import('@/services/supabase/prompts');
-      
+
       const { prompt, error: dbError } = await createPrompt({
         user_id: user.id, // CRITICAL: explicit user_id for RLS
         title: title.trim(),
@@ -220,14 +253,17 @@ export default function UploadPrompt() {
 
       if (dbError || !prompt) {
         console.error('❌ Database insert failed:', dbError);
-        
-        // CLEANUP: Delete uploaded image since DB insert failed
+
+        // CLEANUP: Delete uploaded image since DB insert failed (only for stored images)
         const { deletePromptImage } = await import('@/services/supabase/storage');
         await deletePromptImage(uploadedImageUrl);
-        
+
+        const isLimitError = dbError?.code === 'P0001' || dbError?.message?.includes('Daily prompt upload limit');
         toast({
-          title: "Upload failed",
-          description: dbError?.message || "Could not save prompt to database",
+          title: isLimitError ? "Daily upload limit reached" : "Upload failed",
+          description: isLimitError
+            ? "Unverified accounts can upload a maximum of 3 prompts per day. Limit resets at 12:00 AM UTC."
+            : (dbError?.message || "Could not save prompt to database"),
           variant: "destructive",
         });
         return;
@@ -265,11 +301,11 @@ export default function UploadPrompt() {
 
       // Redirect to prompt detail page using the returned ID
       navigate(`/prompt/${prompt.id}`, { replace: true });
-      
+
     } catch (error) {
       console.error('❌ Unexpected upload error:', error);
 
-      // CLEANUP: If we uploaded an image but error occurred, clean it up
+      // CLEANUP: If we uploaded an image to storage but error occurred, clean it up
       if (uploadedImageUrl) {
         try {
           const { deletePromptImage } = await import('@/services/supabase/storage');
@@ -279,13 +315,20 @@ export default function UploadPrompt() {
         }
       }
 
+      const errorMessage = getErrorMessage(error, "An unexpected error occurred");
+      const isLimitError = (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "P0001") ||
+        errorMessage.includes("Daily prompt upload limit");
+
       toast({
-        title: "Upload failed",
-        description: getErrorMessage(error, "An unexpected error occurred"),
+        title: isLimitError ? "Daily upload limit reached" : "Upload failed",
+        description: isLimitError
+          ? "Unverified accounts can upload a maximum of 3 prompts per day. Limit resets at 12:00 AM UTC."
+          : errorMessage,
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
+      setIsUploading(false);
     }
   };
 
@@ -326,109 +369,79 @@ export default function UploadPrompt() {
               Upload Prompt
             </h1>
 
+            {/* Daily Upload Limit Status Banner */}
+            {limitStatus && (
+              <div className="mb-6">
+                {limitStatus.isVerified ? (
+                  <div className="flex items-center gap-2 p-3 bg-secondary/40 border border-border/50 rounded-sm text-xs sm:text-sm text-muted-foreground">
+                    <ShieldCheck className="h-4 w-4 text-accent flex-shrink-0" />
+                    <span>Verified Creator &bull; Unlimited daily uploads</span>
+                  </div>
+                ) : limitStatus.remaining <= 0 ? (
+                  <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-sm text-destructive flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-sm sm:text-base">Daily upload limit reached (3/3)</h4>
+                      <p className="text-xs sm:text-sm mt-1 text-destructive/90">
+                        Unverified accounts can upload a maximum of 3 prompts per calendar day. Deleting prompts does not restore your daily allowance. Your limit will reset at 12:00 AM UTC.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2 p-3 bg-secondary/40 border border-border/50 rounded-sm text-xs sm:text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-foreground/70 flex-shrink-0" />
+                      <span>
+                        <strong className="text-foreground">{limitStatus.remaining} of {limitStatus.limit}</strong> daily uploads remaining today
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground/80">Resets at 12:00 AM UTC</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
               {/* Image Upload */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm sm:text-base">Image</Label>
+                <Label className="text-sm sm:text-base">Image</Label>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_TYPES.join(",")}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {!imagePreview ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setUseUrl(!useUrl);
-                      setImageFile(null);
-                      setImagePreview(null);
-                      setImageUrl("");
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = "";
-                      }
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
                   >
-                    {useUrl ? "Upload file instead" : "Use URL instead"}
+                    <ImageIcon className="h-8 sm:h-10 w-8 sm:w-10 text-muted-foreground" />
+                    <div className="text-center px-4">
+                      <p className="text-xs sm:text-sm font-medium">Click to upload image</p>
+                      <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 3MB</p>
+                    </div>
                   </button>
-                </div>
-
-                {useUrl ? (
-                  <div className="space-y-2">
-                    <Input
-                      type="url"
-                      placeholder="https://example.com/image.jpg"
-                      value={imageUrl}
-                      onChange={(e) => {
-                        setImageUrl(e.target.value);
-                        setImagePreview(e.target.value);
-                      }}
-                      className="bg-secondary/50 border-0 text-sm sm:text-base"
-                    />
-                    {imagePreview && (
-                      <div className="relative">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
-                          onError={() => {
-                            toast({
-                              title: "Invalid image URL",
-                              description: "Could not load image from the provided URL",
-                              variant: "destructive",
-                            });
-                            setImagePreview(null);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setImageUrl("");
-                            setImagePreview(null);
-                          }}
-                          className="absolute top-2 right-2 p-1.5 bg-background/80 rounded-sm hover:bg-background transition-colors touch-target"
-                          aria-label="Clear image"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 ) : (
-                  <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileSelect}
-                      className="hidden"
+                  <div className="relative">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-xl"
                     />
-
-                    {!imagePreview ? (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-sm flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
-                      >
-                        <ImageIcon className="h-8 sm:h-10 w-8 sm:w-10 text-muted-foreground" />
-                        <div className="text-center px-4">
-                          <p className="text-xs sm:text-sm font-medium">Click to upload image</p>
-                          <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 5MB</p>
-                        </div>
-                      </button>
-                    ) : (
-                      <div className="relative">
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={clearImage}
-                          className="absolute top-2 right-2 p-1.5 bg-background/80 rounded-sm hover:bg-background transition-colors touch-target"
-                          aria-label="Remove image"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </>
+                    <button
+                      type="button"
+                      onClick={clearImage}
+                      className="absolute top-2 right-2 p-1.5 bg-background/80 rounded-sm hover:bg-background transition-colors touch-target"
+                      aria-label="Remove image"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -579,13 +592,23 @@ export default function UploadPrompt() {
                 className="w-full text-sm sm:text-base py-2.5 sm:py-3"
                 disabled={
                   isSubmitting ||
+                  isCheckingLimit ||
+                  (limitStatus !== null && !limitStatus.isVerified && limitStatus.remaining <= 0) ||
                   !toolUsed ||
                   (toolUsed === "Other" && !customTool.trim()) ||
                   tags.length < 3 ||
-                  (useUrl ? !imageUrl.trim() : !imageFile)
+                  !imageFile
                 }
               >
-                {isUploading ? "Uploading image..." : isSubmitting ? "Saving..." : "Upload Prompt"}
+                {isUploading
+                  ? "Uploading image..."
+                  : isSubmitting
+                    ? "Saving..."
+                    : isCheckingLimit
+                      ? "Checking upload limit..."
+                      : limitStatus && !limitStatus.isVerified && limitStatus.remaining <= 0
+                        ? "Daily Limit Reached (3/3)"
+                        : "Upload Prompt"}
               </Button>
             </form>
           </div>

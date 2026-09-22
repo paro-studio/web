@@ -12,7 +12,9 @@
 -- user id to copy anywhere. Sign up first or it will tell you to.
 --
 -- Images come from picsum.photos, a free placeholder service. Nothing here is
--- real user data and nothing comes from parostudios.in.
+-- real user data and nothing comes from parostudios.in. The app only accepts
+-- prompt images from your own storage bucket, but that rule applies to the API,
+-- not the SQL editor, so these placeholders still go in.
 --
 -- Safe to run more than once. It clears its own sample rows first.
 
@@ -33,13 +35,16 @@ begin
   -- Make the account verified so the badge is visible, and fill in the profile
   -- if it is still blank. coalesce means a profile you already set up is left
   -- alone.
+  --
+  -- Avatar and banner are left alone. The database only accepts images from
+  -- your own storage bucket, or a Google photo for the avatar, so a placeholder
+  -- URL would be rejected. Signing in with Google already gives you an avatar,
+  -- and you can upload a banner from Settings.
   update public.profiles
   set
     verified   = true,
     full_name  = coalesce(full_name, 'Paro Demo'),
-    bio        = coalesce(bio, 'Sample account for local development.'),
-    avatar_url = coalesce(avatar_url, 'https://picsum.photos/seed/paro-avatar/200/200'),
-    cover_url  = coalesce(cover_url, 'https://picsum.photos/seed/paro-cover/1200/400')
+    bio        = coalesce(bio, 'Sample account for local development.')
   where id = seed_user;
 
   -- Remove sample rows from a previous run so this stays repeatable. Only

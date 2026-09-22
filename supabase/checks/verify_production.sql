@@ -17,13 +17,14 @@ with checks as (
     1 as ord,
     'RLS enabled on every public table' as check_name,
     case when count(*) = 0 then 'PASS' else 'FAIL' end as status,
-    coalesce(string_agg(c.relname, ', '), 'all 8 enabled') as detail
+    coalesce(string_agg(c.relname, ', '), 'all 10 enabled') as detail
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relname in ('profiles', 'prompts', 'likes', 'saves', 'follows',
-                      'feedback', 'prompt_ratings', 'prompt_reports')
+                      'feedback', 'prompt_ratings', 'prompt_reports', 'prompt_uploads',
+                      'prompt_counter_events')
     and not c.relrowsecurity
 
   union all
@@ -104,8 +105,24 @@ with checks as (
   union all
 
   -- 7 ----------------------------------------------------------------------
+  -- The throttle table records who viewed what. Clients must not read it, and
+  -- must not be able to reset it by writing to it.
   select
     7,
+    'counter throttle table is hidden from clients',
+    case when not (
+         has_table_privilege('anon',          'public.prompt_counter_events', 'SELECT, INSERT, UPDATE, DELETE')
+      or has_table_privilege('authenticated', 'public.prompt_counter_events', 'SELECT, INSERT, UPDATE, DELETE')
+      or has_function_privilege('anon',          'public.claim_prompt_counter(uuid, text, text, interval)', 'EXECUTE')
+      or has_function_privilege('authenticated', 'public.claim_prompt_counter(uuid, text, text, interval)', 'EXECUTE')
+    ) then 'PASS' else 'FAIL' end,
+    'anyone could reset the view and copy throttle if this fails'
+
+  union all
+
+  -- 8 ----------------------------------------------------------------------
+  select
+    8,
     'migration history is recorded',
     case when count(*) >= 2 then 'PASS' else 'FAIL' end,
     count(*)::text || ' migrations applied'

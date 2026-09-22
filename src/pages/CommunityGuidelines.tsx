@@ -229,7 +229,7 @@ export default function CommunityGuidelines() {
                     </p>
 
                     {section.callout && (
-                      <div className="p-4 sm:p-5 rounded-lg bg-gold/10 border border-gold/20 max-w-2xl mx-auto">
+                      <div className="p-4 sm:p-5 rounded-xl bg-gold/10 border border-gold/20 max-w-2xl mx-auto">
                         <p className="text-gold font-semibold text-base sm:text-lg tracking-wide">
                           {section.callout}
                         </p>
