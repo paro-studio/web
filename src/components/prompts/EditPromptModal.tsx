@@ -48,6 +48,7 @@ export function EditPromptModal({
 }: EditPromptModalProps) {
   const [title, setTitle] = useState(prompt.title);
   const [promptText, setPromptText] = useState(prompt.prompt_text ?? "");
+  const [initialPromptText, setInitialPromptText] = useState(prompt.prompt_text ?? "");
   const [textLoading, setTextLoading] = useState(prompt.prompt_text === undefined);
   const [toolUsed, setToolUsed] = useState(prompt.tool_used);
   const [customTool, setCustomTool] = useState("");
@@ -74,6 +75,7 @@ export function EditPromptModal({
         return;
       }
       setPromptText(text);
+      setInitialPromptText(text);
       setTextLoading(false);
     });
     return () => { cancelled = true; };
@@ -121,7 +123,7 @@ export function EditPromptModal({
       return;
     }
 
-    if (promptText.length > 15000) {
+    if (promptText !== initialPromptText && promptText.length > 15000) {
       toast({
         title: "Prompt too long",
         description: "Please keep your prompt under 15000 characters",
