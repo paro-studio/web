@@ -36,9 +36,9 @@ vi.mock("@/services/supabase/follows", () => ({
 }));
 
 const rows = [
-  { id: "a", userId: "u1", title: "A", promptText: "", imageUrl: "", toolUsed: "", tags: ["city"], createdAt: "2026-01-01T00:00:00Z", viewCount: 5, copyCount: 1 },
-  { id: "b", userId: "u1", title: "B", promptText: "", imageUrl: "", toolUsed: "", tags: ["art"], createdAt: "2026-01-03T00:00:00Z", viewCount: 1, copyCount: 9 },
-  { id: "c", userId: "u2", title: "C", promptText: "", imageUrl: "", toolUsed: "", tags: ["city"], createdAt: "2026-01-02T00:00:00Z", viewCount: 9, copyCount: 0 },
+  { id: "a", userId: "u1", title: "A", imageUrl: "", toolUsed: "", tags: ["city"], createdAt: "2026-01-01T00:00:00Z", viewCount: 5, copyCount: 1 },
+  { id: "b", userId: "u1", title: "B", imageUrl: "", toolUsed: "", tags: ["art"], createdAt: "2026-01-03T00:00:00Z", viewCount: 1, copyCount: 9 },
+  { id: "c", userId: "u2", title: "C", imageUrl: "", toolUsed: "", tags: ["city"], createdAt: "2026-01-02T00:00:00Z", viewCount: 9, copyCount: 0 },
 ];
 
 function wrapper({ children }: { children: ReactNode }) {

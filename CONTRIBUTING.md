@@ -39,6 +39,9 @@ Small, focused pull requests get merged much faster than large ones.
 
 ## Setup
 
+Use the Node version in [`.nvmrc`](.nvmrc), which is what CI runs. With nvm,
+`nvm use` picks it up.
+
 ```bash
 git clone https://github.com/paro-studio/web.git
 cd web

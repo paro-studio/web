@@ -1,7 +1,8 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { getProfile } from "@/services/supabase/profiles";
 import { getUserPrompts } from "@/services/supabase/prompts";
@@ -19,18 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { PromptWithDetails } from "@/hooks/usePrompts";
-import { ExternalLink, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-
 
 export default function Profile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile: currentUserProfile } = useAuth();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followerCount, setFollowerCount] = useState(0);
   const [editingPrompt, setEditingPrompt] = useState<PromptWithDetails | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
@@ -93,7 +90,6 @@ export default function Profile() {
         return {
           id: p.id,
           title: p.title,
-          promptText: p.promptText,
           imageUrl: p.imageUrl,
           toolUsed: p.toolUsed,
           viewCount: p.viewCount || 0,
@@ -144,33 +140,19 @@ export default function Profile() {
     enabled: !!profile?.id,
   });
 
-  useEffect(() => {
-    if (followerData) {
-      setFollowerCount(followerData.count);
-      setIsFollowing(followerData.following);
-    }
-  }, [followerData]);
+  const followMutation = useSocialMutation("follow", currentUserProfile?.id, profile?.id);
+  const isFollowing = followMutation.pending?.active ?? followerData?.following ?? false;
+  const followerCount = followMutation.pending?.count ?? followerData?.count ?? 0;
 
   const handleFollow = async () => {
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to follow creators",
-      });
+      setAuthModalOpen(true);
       return;
     }
 
     if (!currentUserProfile || !profile?.id) return;
 
-    const newFollowing = !isFollowing;
-    setIsFollowing(newFollowing);
-    setFollowerCount((prev) => (newFollowing ? prev + 1 : prev - 1));
-
-    const { toggleFollow } = await import('@/services/supabase/follows');
-    await toggleFollow(currentUserProfile.id, profile.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['follower-count', profile.id] });
+    followMutation.toggle(isFollowing, followerCount);
   };
 
 
@@ -290,7 +272,7 @@ export default function Profile() {
               <div className="masonry-grid">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="masonry-item">
-                    <Skeleton className="aspect-[3/4] rounded-sm" />
+                    <Skeleton className="aspect-[3/4] rounded-xl" />
                   </div>
                 ))}
               </div>
@@ -325,7 +307,6 @@ export default function Profile() {
                     <PromptCard
                       id={prompt.id}
                       title={prompt.title}
-                      promptText={prompt.promptText}
                       imageUrl={prompt.imageUrl}
                       toolUsed={prompt.toolUsed}
                       viewCount={prompt.viewCount}
@@ -362,7 +343,6 @@ export default function Profile() {
           prompt={{
             id: editingPrompt.id,
             title: editingPrompt.title,
-            prompt_text: editingPrompt.promptText,
             image_url: editingPrompt.imageUrl,
             tool_used: editingPrompt.toolUsed,
             tags: editingPrompt.tags,

@@ -8,11 +8,11 @@ import { getLikeCounts, getLikedPromptIds } from "@/services/supabase/likes";
 import { getSavedPromptIds } from "@/services/supabase/saves";
 import { getPromptRatings } from "@/services/supabase/ratings";
 import { getFollowerCounts } from "@/services/supabase/follows";
+import { promptsQueryKey } from "@/hooks/queryKeys";
 
 export interface PromptWithDetails {
   id: string;
   title: string;
-  promptText: string;
   imageUrl: string;
   toolUsed: string;
   viewCount: number;
@@ -55,7 +55,6 @@ export function usePrompts(options?: {
         const query = searchQuery.toLowerCase();
         filtered = filtered.filter(p =>
           p.title.toLowerCase().includes(query) ||
-          p.promptText.toLowerCase().includes(query) ||
           p.tags.some(t => t.toLowerCase().includes(query))
         );
       }
@@ -86,7 +85,7 @@ export function usePrompts(options?: {
 
   return useQuery({
     // The user id is in the key because isLiked and isSaved depend on it.
-    queryKey: ["prompts", limit, user?.id ?? null],
+    queryKey: promptsQueryKey(limit, user?.id),
     queryFn: async () => {
       const { prompts: allPrompts, error } = await getAllPrompts(limit * 2); // Get more for filtering
 
@@ -116,7 +115,6 @@ export function usePrompts(options?: {
         return {
           id: p.id,
           title: p.title,
-          promptText: p.promptText,
           imageUrl: p.imageUrl,
           toolUsed: p.toolUsed,
           viewCount: p.viewCount || 0,
@@ -151,25 +149,6 @@ export function usePrompts(options?: {
     // profile fetch as well held the whole feed back behind two extra round
     // trips it does not need.
     enabled: !sessionLoading,
-  });
-}
-
-export function useTags() {
-  return useQuery({
-    queryKey: ["tags"],
-    queryFn: async () => {
-      // Get all prompts and extract unique tags
-      const { prompts, error } = await getAllPrompts(100);
-
-      if (error || !prompts) return [];
-
-      const tagsSet = new Set<string>();
-      prompts.forEach(p => {
-        p.tags?.forEach(tag => tagsSet.add(tag));
-      });
-
-      return Array.from(tagsSet).sort();
-    },
   });
 }
 

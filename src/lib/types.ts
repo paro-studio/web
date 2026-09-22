@@ -19,7 +19,6 @@ export interface NormalizedPrompt {
   id: string;
   userId: string;
   title: string;
-  promptText: string;
   imageUrl: string;
   toolUsed: string;
   tags: string[];

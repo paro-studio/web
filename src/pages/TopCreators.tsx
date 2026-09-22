@@ -26,7 +26,7 @@ export default function TopCreators() {
             {isLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {[...Array(9)].map((_, i) => (
-                  <Skeleton key={i} className="h-20 sm:h-24 rounded-sm" />
+                  <Skeleton key={i} className="h-20 sm:h-24 rounded-xl" />
                 ))}
               </div>
             ) : !topCreators || topCreators.length === 0 ? (

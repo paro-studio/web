@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AuthModal } from "./AuthModal";
@@ -17,7 +18,11 @@ vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
 async function show(mode: "login" | "signup" = "login") {
   const onOpenChange = vi.fn();
-  render(<AuthProvider><AuthModal open onOpenChange={onOpenChange} defaultMode={mode} /></AuthProvider>);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AuthProvider><AuthModal open onOpenChange={onOpenChange} defaultMode={mode} /></AuthProvider>
+    </QueryClientProvider>
+  );
   await waitFor(() => expect(screen.getByRole("button", { name: "Continue with Google" })).toBeEnabled());
   return onOpenChange;
 }

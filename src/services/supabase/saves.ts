@@ -49,33 +49,20 @@ export async function getSavedPromptIds(userId: string, promptIds: string[]): Pr
   return new Set((data ?? []).map((row) => row.prompt_id));
 }
 
-/**
- * Toggle save status (insert if not exists, delete if exists)
- */
-export async function toggleSave(userId: string, promptId: string): Promise<{ error: PostgrestError | null }> {
-  // Check if already saved
-  const { data: existing } = await supabase
-    .from('saves')
-    .select('id')
-    .match({ user_id: userId, prompt_id: promptId })
-    .maybeSingle();
-
-  if (existing) {
-    // Unsave
+/** Set the requested save state without depending on a possibly stale read. */
+export async function setSave(userId: string, promptId: string, active: boolean): Promise<{ error: PostgrestError | null }> {
+  if (!active) {
     const { error } = await supabase
       .from('saves')
       .delete()
       .match({ user_id: userId, prompt_id: promptId });
-    
-    return { error };
-  } else {
-    // Save
-    const { error } = await supabase
-      .from('saves')
-      .insert({ user_id: userId, prompt_id: promptId });
-    
     return { error };
   }
+
+  const { error } = await supabase
+    .from('saves')
+    .upsert({ user_id: userId, prompt_id: promptId }, { onConflict: 'user_id,prompt_id', ignoreDuplicates: true });
+  return { error };
 }
 
 /**
@@ -93,7 +80,6 @@ export async function getUserSaves(
         id,
         user_id,
         title,
-        prompt,
         image_url,
         ai_tool,
         tags,
@@ -118,7 +104,6 @@ export async function getUserSaves(
         id: p.id,
         userId: p.user_id,
         title: p.title,
-        promptText: p.prompt,
         imageUrl: p.image_url,
         toolUsed: p.ai_tool,
         tags: p.tags || [],

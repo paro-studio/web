@@ -11,7 +11,6 @@ function makePrompt(overrides: Partial<Parameters<typeof toImageFeedItem>[0]> = 
   return {
     id: "prompt-1",
     title: "A cat in a spacesuit",
-    promptText: "a cat wearing a spacesuit, cinematic lighting",
     imageUrl: "https://example.test/cat.png",
     toolUsed: "NANO BANANA (Gemini)",
     viewCount: 12,
@@ -44,7 +43,6 @@ describe("toImageFeedItem", () => {
       data: {
         id: "prompt-1",
         title: "A cat in a spacesuit",
-        prompt_text: "a cat wearing a spacesuit, cinematic lighting",
         image_url: "https://example.test/cat.png",
         tool_used: "NANO BANANA (Gemini)",
         view_count: 12,

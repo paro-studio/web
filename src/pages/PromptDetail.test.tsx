@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PromptDetail from "./PromptDetail";
 import { supabase } from "@/services/supabase/client";
+import { clearViewTracking } from "@/lib/viewTracking";
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: null, profile: null, loading: false }),
@@ -72,15 +73,22 @@ function createQueryBuilder(table: string) {
   return builder;
 }
 
-function renderPromptDetail(seed?: (queryClient: QueryClient) => void) {
+function renderPromptDetail(
+  seedOrPromptId?: ((queryClient: QueryClient) => void) | string,
+  promptIdArg = "prompt-1"
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
+  const seed = typeof seedOrPromptId === "function" ? seedOrPromptId : undefined;
+  const promptId = typeof seedOrPromptId === "string" ? seedOrPromptId : promptIdArg;
+
   seed?.(queryClient);
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/prompt/prompt-1"]}>
+      <MemoryRouter initialEntries={[`/prompt/${promptId}`]}>
         <Routes>
           <Route path="/prompt/:id" element={<PromptDetail />} />
         </Routes>
@@ -91,6 +99,9 @@ function renderPromptDetail(seed?: (queryClient: QueryClient) => void) {
 
 describe("PromptDetail", () => {
   beforeEach(() => {
+    localStorage.clear();
+    clearViewTracking();
+    vi.clearAllMocks();
     activeProfile = profile;
     vi.mocked(supabase.from).mockImplementation((table) => createQueryBuilder(table));
     vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: null });
@@ -118,6 +129,43 @@ describe("PromptDetail", () => {
     expect(screen.getByLabelText("Rate 5 stars")).toBeInTheDocument();
   });
 
+  it("increments view count on first view and deduplicates on subsequent remounts", async () => {
+    const { unmount } = renderPromptDetail();
+    await screen.findByText("Test prompt");
+
+    expect(supabase.rpc).toHaveBeenCalledWith("increment_view_count", {
+      prompt_id: "prompt-1",
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+
+    // Unmount and remount (simulating navigating back to feed and opening prompt again)
+    unmount();
+    renderPromptDetail();
+    await screen.findByText("Test prompt");
+
+    // View count RPC should not have been called a second time
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("increments view count for different prompts separately", async () => {
+    const { unmount } = renderPromptDetail("prompt-1");
+    await screen.findByText("Test prompt");
+
+    expect(supabase.rpc).toHaveBeenCalledWith("increment_view_count", {
+      prompt_id: "prompt-1",
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+
+    unmount();
+    renderPromptDetail("prompt-2");
+    await screen.findByText("Test prompt");
+
+    expect(supabase.rpc).toHaveBeenCalledWith("increment_view_count", {
+      prompt_id: "prompt-2",
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
+  });
+
   it("opens straight away from a card already in the feed cache", async () => {
     // Hold the real fetch open so only the cached card can be on screen.
     vi.mocked(supabase.from).mockImplementation(() => {
@@ -136,7 +184,6 @@ describe("PromptDetail", () => {
         {
           id: "prompt-1",
           title: "Cached card",
-          promptText: "A test prompt",
           imageUrl: "https://example.test/prompt.png",
           toolUsed: "Test tool",
           viewCount: 3,

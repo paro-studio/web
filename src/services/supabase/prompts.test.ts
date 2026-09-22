@@ -6,6 +6,7 @@ import {
   checkDailyUploadLimit,
   deletePrompt,
   getAllPrompts,
+  getPrompt,
   getUserPrompts,
   updatePrompt,
 } from "./prompts";
@@ -70,7 +71,6 @@ describe("prompts service", () => {
       const { prompts, error } = await getAllPrompts(25);
 
       expect(supabase.from).toHaveBeenCalledWith("prompts");
-      expect(selectMock).toHaveBeenCalledWith("*");
       expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
       expect(limitMock).toHaveBeenCalledWith(25);
       expect(error).toBeNull();
@@ -79,7 +79,6 @@ describe("prompts service", () => {
           id: "prompt-1",
           userId: "user-1",
           title: "Cyberpunk City",
-          promptText: "A neon city in 2077",
           imageUrl: "https://example.com/cyberpunk.png",
           toolUsed: "Midjourney",
           tags: ["cyberpunk", "city"],
@@ -91,7 +90,6 @@ describe("prompts service", () => {
           id: "prompt-2",
           userId: "user-2",
           title: "Watercolor Landscape",
-          promptText: "Serene mountain lake",
           imageUrl: "https://example.com/landscape.png",
           toolUsed: "DALL-E",
           tags: ["art", "nature"],
@@ -162,7 +160,6 @@ describe("prompts service", () => {
       const { prompts, error } = await getUserPrompts("user-1");
 
       expect(supabase.from).toHaveBeenCalledWith("prompts");
-      expect(selectMock).toHaveBeenCalledWith("*");
       expect(eqMock).toHaveBeenCalledWith("user_id", "user-1");
       expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
       expect(error).toBeNull();
@@ -171,7 +168,6 @@ describe("prompts service", () => {
           id: "prompt-1",
           userId: "user-1",
           title: "Cyberpunk City",
-          promptText: "A neon city in 2077",
           imageUrl: "https://example.com/cyberpunk.png",
           toolUsed: "Midjourney",
           tags: ["cyberpunk", "city"],
@@ -180,6 +176,51 @@ describe("prompts service", () => {
           copyCount: 5,
         },
       ]);
+    });
+  });
+
+  // The text is only loaded by getPromptText, on Copy or edit. The database
+  // refuses prompts.prompt to signed out visitors, and a signed out select("*")
+  // on prompts fails outright. These pin both: never "*", never the prompt.
+  describe("list and detail queries never ask for the prompt text", () => {
+    const hasPromptColumn = (columns: string) =>
+      columns.split(",").map((c) => c.trim()).includes("prompt");
+
+    it("getAllPrompts", async () => {
+      const limitMock = vi.fn().mockResolvedValue({ data: [], error: null });
+      const selectMock = vi.fn().mockReturnValue({ order: vi.fn().mockReturnValue({ limit: limitMock }) });
+      vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as never);
+
+      await getAllPrompts(10);
+
+      const columns = selectMock.mock.calls[0][0] as string;
+      expect(columns).not.toBe("*");
+      expect(hasPromptColumn(columns)).toBe(false);
+      expect(columns).toContain("image_url");
+    });
+
+    it("getUserPrompts", async () => {
+      const orderMock = vi.fn().mockResolvedValue({ data: [], error: null });
+      const selectMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ order: orderMock }) });
+      vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as never);
+
+      await getUserPrompts("user-1");
+
+      const columns = selectMock.mock.calls[0][0] as string;
+      expect(columns).not.toBe("*");
+      expect(hasPromptColumn(columns)).toBe(false);
+    });
+
+    it("getPrompt", async () => {
+      const singleMock = vi.fn().mockResolvedValue({ data: null, error: null });
+      const selectMock = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single: singleMock }) });
+      vi.mocked(supabase.from).mockReturnValue({ select: selectMock } as never);
+
+      await getPrompt("prompt-1");
+
+      const columns = selectMock.mock.calls[0][0] as string;
+      expect(columns).not.toBe("*");
+      expect(hasPromptColumn(columns)).toBe(false);
     });
   });
 

@@ -91,8 +91,8 @@ export async function uploadAvatar(userId: string, file: File): Promise<UploadRe
     }
 
     // Fixed path, overwritten each time. The extension stays .jpg for the sake
-    // of deleteAvatar and any URL already stored on a profile; what the browser
-    // actually serves is decided by contentType below.
+    // of any URL already stored on a profile; what the browser actually
+    // serves is decided by contentType below.
     const filePath = `${userId}/avatar.jpg`;
 
 
@@ -199,41 +199,6 @@ export async function uploadBanner(userId: string, file: File): Promise<UploadRe
   }
 }
 
-/**
- * Delete avatar from storage (optional - for cleanup)
- */
-export async function deleteAvatar(userId: string): Promise<{ error: string | null }> {
-  const filePath = `${userId}/avatar.jpg`;
-  
-  const { error } = await supabase.storage
-    .from(AVATAR_BUCKET)
-    .remove([filePath]);
-
-  if (error) {
-    console.error('❌ Failed to delete avatar:', error);
-    return { error: getErrorMessage(error) };
-  }
-
-  return { error: null };
-}
-
-/**
- * Delete banner from storage (optional - for cleanup)
- */
-export async function deleteBanner(userId: string): Promise<{ error: string | null }> {
-  const filePath = `${userId}/banner.jpg`;
-  
-  const { error } = await supabase.storage
-    .from(BANNER_BUCKET)
-    .remove([filePath]);
-
-  if (error) {
-    console.error('❌ Failed to delete banner:', error);
-    return { error: getErrorMessage(error) };
-  }
-
-  return { error: null };
-}
 
 /**
  * Upload prompt image to Supabase Storage

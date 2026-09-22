@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { clearPendingRoute, setPendingRoute } from "@/lib/pendingRoute";
 import { Chrome } from "lucide-react";
 
 interface AuthModalProps {
@@ -16,11 +17,17 @@ export function AuthModal({ open, onOpenChange, defaultMode = "login" }: AuthMod
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    // Google sends everyone back to the feed. Remember this page so the feed
+    // can forward them here once they are signed in. The feed itself is never
+    // stored, see setPendingRoute.
+    setPendingRoute(window.location.pathname + window.location.search);
     const { error } = await signInWithGoogle();
     if (!error) {
       // OAuth redirect will happen
       // Don't close modal or reset loading - user is being redirected
     } else {
+      // No redirect is coming, so nothing will pick the stored page up.
+      clearPendingRoute();
       setIsLoading(false);
     }
   };

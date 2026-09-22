@@ -105,10 +105,11 @@ work on. To fill it:
 1. Sign up in the app and pick a username
 2. Run [`supabase/seed.sql`](supabase/seed.sql) in the SQL Editor
 
-That adds six sample prompts to the account you just made, fills in an avatar
-and banner, and marks it verified so the badge shows. Images come from a free
-placeholder service. Safe to run more than once, and it only ever touches its
-own rows.
+That adds six sample prompts to the account you just made, fills in a name and
+bio, and marks it verified so the badge shows. Prompt images come from a free
+placeholder service. Your avatar comes from Google, and you can upload a banner
+from Settings. Safe to run more than once, and it only ever touches its own
+rows.
 
 Development only. Never run it against production.
 

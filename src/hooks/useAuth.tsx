@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/services/supabase/client';
 import * as supabaseAuth from '@/services/supabase/auth';
@@ -38,6 +39,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -139,6 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // below is the authoritative read of the starting state.
       if (event === 'INITIAL_SESSION') return;
 
+      // Cached queries hold the previous user's likes, saves and private lists,
+      // and stay around for gcTime. Without this, the next person on a shared
+      // device sees them. SIGNED_OUT also fires for another tab signing out and
+      // for a session that expires, not just the Sign out button. clear() is
+      // synchronous and never touches supabase, so it is safe inside this lock.
+      if (event === 'SIGNED_OUT') queryClient.clear();
+
       setSession(nextSession);
       setUser(
         nextSession?.user
@@ -179,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [queryClient]);
 
   // Load the profile whenever the signed-in user changes. Runs outside the
   // auth callback, so it is safe to call Supabase here.
@@ -247,7 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Continue anyway - we still want to clear local state
     }
     
-    // Clear state regardless of API result
+    // Clear state regardless of API result. The cache is cleared here too
+    // because a failed server sign out may never emit SIGNED_OUT.
+    queryClient.clear();
     setUser(null);
     setSession(null);
     setProfile(null);

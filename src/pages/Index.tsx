@@ -34,7 +34,6 @@ export default function Index() {
     [searchParams]
   );
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -64,9 +63,6 @@ export default function Index() {
 
   // Always use fixed predefined tags - never changes based on user uploads
   const displayTags = [...STANDARD_TAGS];
-  // Mobile tags - exclude solo, landscape, fashion, product shot (fits in 2 rows)
-  const mobileExcludedTags = ["solo", "landscape", "fashion", "product shot"];
-  const mobileTags = displayTags.filter(tag => !mobileExcludedTags.includes(tag));
 
   // Filter prompts by search and tags
   const filteredPrompts = useMemo(() => {
@@ -77,7 +73,6 @@ export default function Index() {
       result = result.filter(
         (p) =>
           p.title.toLowerCase().includes(query) ||
-          p.promptText.toLowerCase().includes(query) ||  // camelCase
           p.tags.some((tag) => tag.toLowerCase().includes(query))
       );
     }
@@ -162,7 +157,6 @@ export default function Index() {
         key={item.type === "image" ? item.data.id : item.data.id}
         item={item}
         onLoginRequired={() => setAuthModalOpen(true)}
-        onDelete={() => setRefreshKey(prev => prev + 1)}
         // Enough to cover the first row on desktop and the first screen on
         // mobile. One of these is the largest contentful paint, and lazy
         // loading it was costing seconds. Everything below still lazy loads.
@@ -186,7 +180,7 @@ export default function Index() {
         <section className="md:hidden px-4 py-4 sm:py-6">
           <Link
             to="/originals"
-            className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
+            className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
           >
             <div className="flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-4 sm:h-5 w-4 sm:w-5 text-[hsl(var(--gold))]" />
@@ -240,7 +234,7 @@ export default function Index() {
               <div className="masonry-grid">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="masonry-item">
-                    <Skeleton className="aspect-[3/4] rounded-sm" />
+                    <Skeleton className="aspect-[3/4] rounded-xl" />
                     <Skeleton className="h-5 sm:h-6 mt-2 sm:mt-3 w-3/4" />
                     <Skeleton className="h-3 sm:h-4 mt-1.5 sm:mt-2 w-1/2" />
                   </div>

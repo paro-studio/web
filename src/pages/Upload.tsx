@@ -436,7 +436,7 @@ export default function UploadPrompt() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-sm flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
+                    className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
                   >
                     <ImageIcon className="h-8 sm:h-10 w-8 sm:w-10 text-muted-foreground" />
                     <div className="text-center px-4">
@@ -449,7 +449,7 @@ export default function UploadPrompt() {
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
+                      className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-xl"
                     />
                     <button
                       type="button"

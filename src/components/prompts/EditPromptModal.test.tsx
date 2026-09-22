@@ -19,8 +19,11 @@ vi.mock("@/services/supabase/client", () => ({
   },
 }));
 
+const getPromptText = vi.fn();
+
 vi.mock("@/services/supabase/prompts", () => ({
   updatePrompt: (...args: unknown[]) => updatePrompt(...args),
+  getPromptText: (...args: unknown[]) => getPromptText(...args),
 }));
 
 vi.mock("@/services/supabase/storage", () => ({
@@ -74,6 +77,33 @@ describe("EditPromptModal", () => {
     });
     // jsdom does not implement object URLs.
     window.URL.createObjectURL = vi.fn(() => "blob:http://localhost/fake-blob");
+  });
+
+  // Lists never carry the prompt text, so editing from one opens without it.
+  describe("when opened without the prompt text", () => {
+    const { prompt_text: _omit, ...withoutText } = prompt;
+
+    it("loads the text and only then allows saving", async () => {
+      let finish!: (value: unknown) => void;
+      getPromptText.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+      render(<EditPromptModal isOpen onClose={onClose} onUpdated={onUpdated} prompt={withoutText} />);
+
+      expect(getPromptText).toHaveBeenCalledWith("prompt-1");
+      expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
+
+      finish({ text: "a cat wearing a spacesuit", error: null });
+
+      await waitFor(() => expect(screen.getByLabelText(/prompt text/i)).toHaveValue("a cat wearing a spacesuit"));
+      expect(screen.getByRole("button", { name: /save changes/i })).toBeEnabled();
+    });
+
+    it("keeps saving disabled if the text fails to load", async () => {
+      getPromptText.mockResolvedValue({ text: null, error: { message: "boom" } });
+      render(<EditPromptModal isOpen onClose={onClose} onUpdated={onUpdated} prompt={withoutText} />);
+
+      await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })));
+      expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
+    });
   });
 
   it("uploads a newly picked image instead of saving the preview", async () => {
