@@ -3,6 +3,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { DiscordIcon } from "@/components/prompts/brandIcons";
+import { ScrollReveal } from "@/components/ui/scroll-reveal";
 import {
   ShieldCheck,
   HeartHandshake,
@@ -212,10 +213,10 @@ export default function CommunityGuidelines() {
 
               if (section.isFeatured) {
                 return (
-                  <Card
-                    key={section.id}
-                    className="bg-gradient-to-br from-card/80 to-gold/5 backdrop-blur-md border-gold/30 p-6 sm:p-8 rounded-xl shadow-md text-center space-y-4"
-                  >
+                  <ScrollReveal key={section.id}>
+                    <Card
+                      className="bg-gradient-to-br from-card/80 to-gold/5 backdrop-blur-md border-gold/30 p-6 sm:p-8 rounded-xl shadow-md text-center space-y-4"
+                    >
                     <div className="h-12 w-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto text-gold">
                       <Icon className="h-6 w-6" />
                     </div>
@@ -241,15 +242,16 @@ export default function CommunityGuidelines() {
                         {section.closingNote}
                       </p>
                     )}
-                  </Card>
+                    </Card>
+                  </ScrollReveal>
                 );
               }
 
               return (
-                <Card
-                  key={section.id}
-                  className="bg-card/60 backdrop-blur-md border-border/60 p-6 sm:p-8 rounded-xl shadow-sm hover:border-gold/30 transition-all duration-300"
-                >
+                <ScrollReveal key={section.id}>
+                  <Card
+                    className="bg-card/60 backdrop-blur-md border-border/60 p-6 sm:p-8 rounded-xl shadow-sm hover:border-gold/30 transition-all duration-300"
+                  >
                   <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                     <div className="h-12 w-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center flex-shrink-0 text-gold">
                       <Icon className="h-6 w-6" />
@@ -306,7 +308,8 @@ export default function CommunityGuidelines() {
                         ))}
                     </div>
                   </div>
-                </Card>
+                  </Card>
+                </ScrollReveal>
               );
             })}
           </div>
