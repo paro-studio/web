@@ -88,9 +88,6 @@ export async function checkDailyUploadLimit(
 }
 
 
-export const PROMPT_SELECT_COLUMNS =
-  'id, user_id, title, prompt, image_url, ai_tool, tags, created_at, updated_at, view_count, copy_count';
-
 export interface Prompt {
   id: string;
   user_id: string;
@@ -299,9 +296,21 @@ export async function searchPrompts(
     .select(PROMPT_COLUMNS);
 
   if (query && query.trim()) {
-    queryBuilder = queryBuilder.textSearch('fts', query.trim(), {
+    // Prefix match each word, so "cyber" still finds "cyberpunk". Anything
+    // that is not a letter or digit is dropped, because to_tsquery treats
+    // characters like & | ! : ( ) as syntax and throws on stray ones.
+    const terms = query
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(Boolean)
+      .map((word) => `${word}:*`);
+
+    // Nothing searchable left, e.g. a query of only punctuation.
+    if (terms.length === 0) return { prompts: [], error: null };
+
+    queryBuilder = queryBuilder.textSearch('fts', terms.join(' & '), {
       config: 'english',
-      type: 'websearch',
     });
   }
 

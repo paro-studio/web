@@ -297,9 +297,8 @@ describe("prompts service", () => {
 
       expect(supabase.from).toHaveBeenCalledWith("prompts");
       expect(selectMock).toHaveBeenCalledWith(PROMPT_COLUMNS);
-      expect(textSearchMock).toHaveBeenCalledWith("fts", "cyberpunk", {
+      expect(textSearchMock).toHaveBeenCalledWith("fts", "cyberpunk:*", {
         config: "english",
-        type: "websearch",
       });
       expect(orderMock).toHaveBeenCalledWith("created_at", { ascending: false });
       expect(limitMock).toHaveBeenCalledWith(10);
@@ -348,13 +347,41 @@ describe("prompts service", () => {
 
       const { prompts, error } = await searchPrompts({ query: "cyberpunk", tags: ["city"] });
 
-      expect(textSearchMock).toHaveBeenCalledWith("fts", "cyberpunk", {
+      expect(textSearchMock).toHaveBeenCalledWith("fts", "cyberpunk:*", {
         config: "english",
-        type: "websearch",
       });
       expect(overlapsMock).toHaveBeenCalledWith("tags", ["city"]);
       expect(error).toBeNull();
       expect(prompts).toHaveLength(1);
+    });
+
+    it("prefix matches every word and drops tsquery syntax characters", async () => {
+      const limitMock = vi.fn().mockResolvedValue({ data: [], error: null });
+      const orderMock = vi.fn().mockReturnValue({ limit: limitMock });
+      const textSearchMock = vi.fn().mockReturnValue({ order: orderMock });
+      const selectMock = vi.fn().mockReturnValue({ textSearch: textSearchMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      await searchPrompts({ query: "  neon & city:  (portrait) " });
+
+      expect(textSearchMock).toHaveBeenCalledWith("fts", "neon:* & city:* & portrait:*", {
+        config: "english",
+      });
+    });
+
+    it("returns no results without querying when nothing searchable is left", async () => {
+      const selectMock = vi.fn();
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      const { prompts, error } = await searchPrompts({ query: "&& ::" });
+
+      expect(prompts).toEqual([]);
+      expect(error).toBeNull();
     });
   });
 });

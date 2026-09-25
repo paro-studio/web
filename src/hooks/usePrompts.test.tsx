@@ -60,7 +60,8 @@ describe("usePrompts", () => {
     );
 
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data?.map((p) => p.id)).toEqual(["c", "a", "b"]);
+    // Trending score is views + copies * 3 + likes * 2: b 28, c 9, a 8.
+    expect(result.current.data?.map((p) => p.id)).toEqual(["b", "c", "a"]);
 
     rerender({ sortBy: "newest" });
     expect(result.current.data?.map((p) => p.id)).toEqual(["b", "c", "a"]);

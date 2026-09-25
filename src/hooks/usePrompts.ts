@@ -52,14 +52,6 @@ export function usePrompts(options?: {
     (allPrompts: PromptWithDetails[]) => {
       let filtered = allPrompts;
 
-      if (!isSearch && searchQuery) {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(p =>
-          p.title.toLowerCase().includes(query) ||
-          p.tags.some(t => t.toLowerCase().includes(query))
-        );
-      }
-
       if (selectedTags.length > 0) {
         filtered = filtered.filter(p =>
           selectedTags.some(tag => p.tags.includes(tag))
@@ -74,14 +66,16 @@ export function usePrompts(options?: {
           } else if (sortBy === "most_copied") {
             return (b.copyCount || 0) - (a.copyCount || 0);
           } else {
-            // Trending: View count for now
-            return (b.viewCount || 0) - (a.viewCount || 0);
+            // Trending: copies count most, then likes, then views.
+            const score = (p: PromptWithDetails) =>
+              (p.viewCount || 0) + (p.copyCount || 0) * 3 + (p.likeCount || 0) * 2;
+            return score(b) - score(a);
           }
         })
         .slice(0, limit);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [searchQuery, tagsKey, sortBy, limit, isSearch]
+    [tagsKey, sortBy, limit]
   );
 
   return useQuery({

@@ -1373,7 +1373,7 @@ create trigger check_prompt_image_url_trigger
 
 -- Full-text search and tag indexes for prompts
 --
--- Adds a generated tsvector column over title and prompt text with a GIN index,
+-- Adds a generated tsvector column over title and tags with a GIN index,
 -- plus a GIN index on prompts.tags for fast array filtering.
 --
 -- Both database search and tag filtering currently perform sequential full scans.
@@ -1384,7 +1384,9 @@ create trigger check_prompt_image_url_trigger
 -- Generated tsvector column and GIN index for full-text search
 -- ---------------------------------------------------------------------------
 --
--- Stored tsvector generated over title and prompt text using the english config.
+-- Stored tsvector generated over title and tags using the english config.
+-- Prompt text is left out: signed out users cannot read it, and the column
+-- would expose its words to them.
 -- In Postgres, specifying 'english'::regconfig ensures the expression is
 -- immutable and valid for GENERATED ALWAYS AS (...) STORED.
 --
@@ -1395,6 +1397,7 @@ create or replace function public.immutable_array_to_string(arr text[], sep text
 returns text
 language sql
 immutable
+set search_path = ''
 as $$
   select array_to_string(arr, sep);
 $$;
