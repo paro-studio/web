@@ -87,7 +87,7 @@ describe("Accessibility Standards", () => {
       import: "default",
       eager: true,
     });
-    const sub12pxRegex = /text-\[(?:[0-9]|1[0-1])px\]/;
+    const sub12pxRegex = /text-\[(?:(?:[0-9]|1[0-1])(?:\.\d+)?|\.\d+)px\]/;
 
     const offendingFiles: string[] = [];
     for (const [filePath, content] of Object.entries(sourceFiles)) {
@@ -97,5 +97,19 @@ describe("Accessibility Standards", () => {
     }
 
     expect(offendingFiles).toEqual([]);
+  });
+
+  it("catches sub-12px arbitrary font sizes including decimals", () => {
+    const sub12pxRegex = /text-\[(?:(?:[0-9]|1[0-1])(?:\.\d+)?|\.\d+)px\]/;
+    expect(sub12pxRegex.test("text-[11px]")).toBe(true);
+    expect(sub12pxRegex.test("text-[11.5px]")).toBe(true);
+    expect(sub12pxRegex.test("text-[10.8px]")).toBe(true);
+    expect(sub12pxRegex.test("text-[9.5px]")).toBe(true);
+    expect(sub12pxRegex.test("text-[0.5px]")).toBe(true);
+    expect(sub12pxRegex.test("text-[.5px]")).toBe(true);
+    expect(sub12pxRegex.test("text-[12px]")).toBe(false);
+    expect(sub12pxRegex.test("text-[12.5px]")).toBe(false);
+    expect(sub12pxRegex.test("text-[13px]")).toBe(false);
+    expect(sub12pxRegex.test("text-[14px]")).toBe(false);
   });
 });

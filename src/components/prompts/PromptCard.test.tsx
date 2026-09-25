@@ -110,6 +110,9 @@ describe("PromptCard", () => {
       screen.getByText("This will permanently delete this prompt and its image. This cannot be undone.")
     ).toBeInTheDocument();
 
+    // Dropdown menu should be dismissed, avoiding lingering behind the dialog
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
     const cancelButton = screen.getByRole("button", { name: "Cancel" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     expect(cancelButton).toBeInTheDocument();

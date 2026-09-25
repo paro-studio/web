@@ -518,7 +518,6 @@ export function PromptCard({
               {isOwner ? (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     setShowDeleteDialog(true);
                   }}
@@ -644,7 +643,10 @@ export function PromptCard({
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <Dialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Prompt?</DialogTitle>
