@@ -209,4 +209,63 @@ describe("EditPromptModal", () => {
     }
   });
 
+  it("enforces a 100 character limit on the title", async () => {
+    renderModal();
+    const titleInput = screen.getByLabelText(/^title/i);
+    expect(titleInput).toHaveAttribute("maxLength", "100");
+
+    fireEvent.change(titleInput, { target: { value: "a".repeat(101) } });
+    save();
+
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Title too long",
+          description: "Please keep your title under 100 characters",
+          variant: "destructive",
+        }),
+      );
+    });
+    expect(updatePrompt).not.toHaveBeenCalled();
+  });
+
+  it("enforces a 15000 character limit on prompt text when modified", async () => {
+    renderModal();
+    const promptInput = screen.getByLabelText(/prompt text/i);
+    expect(promptInput).toHaveAttribute("maxLength", "15000");
+
+    fireEvent.change(promptInput, { target: { value: "a".repeat(15001) } });
+    save();
+
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Prompt too long",
+          description: "Please keep your prompt under 15000 characters",
+          variant: "destructive",
+        }),
+      );
+    });
+    expect(updatePrompt).not.toHaveBeenCalled();
+  });
+
+  it("allows saving legacy prompt text exceeding 15000 characters if unchanged", async () => {
+    const legacyLongPrompt = {
+      ...prompt,
+      prompt_text: "x".repeat(16000),
+    };
+    render(
+      <EditPromptModal
+        isOpen
+        onClose={onClose}
+        onUpdated={onUpdated}
+        prompt={legacyLongPrompt}
+      />,
+    );
+
+    save();
+
+    await waitFor(() => expect(updatePrompt).toHaveBeenCalled());
+    expect(toast).toHaveBeenCalledWith({ title: "Prompt updated successfully" });
+  });
 });

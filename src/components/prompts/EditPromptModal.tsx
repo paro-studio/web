@@ -123,6 +123,15 @@ export function EditPromptModal({
       return;
     }
 
+    if (title.length > 100) {
+      toast({
+        title: "Title too long",
+        description: "Please keep your title under 100 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (promptText !== initialPromptText && promptText.length > 15000) {
       toast({
         title: "Prompt too long",
@@ -254,6 +263,7 @@ export function EditPromptModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter title"
+              maxLength={100}
               className="mt-1"
             />
           </div>
