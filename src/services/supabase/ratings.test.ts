@@ -1,10 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  getPromptRating,
-  getPromptRatings,
-  getUserPromptRating,
-  ratePrompt,
-} from "./ratings";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { getPromptRating, getPromptRatings, getUserPromptRating, ratePrompt } from "./ratings";
 import { supabase } from "./client";
 
 vi.mock("./client", () => ({
@@ -16,123 +11,137 @@ vi.mock("./client", () => ({
 describe("ratings service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("getPromptRating", () => {
-    it("computes average and count from database records", async () => {
-      vi.mocked(supabase.from).mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockResolvedValue({
-          data: [{ rating: 5 }, { rating: 4 }, { rating: 5 }],
-          error: null,
-        }),
-      } as never);
+    it("reads rating_average and rating_count directly from prompts table", async () => {
+      const maybeSingle = vi.fn().mockResolvedValue({
+        data: { rating_average: 4.5, rating_count: 10 },
+        error: null,
+      });
+      const eq = vi.fn().mockReturnValue({ maybeSingle });
+      const select = vi.fn().mockReturnValue({ eq });
+      vi.mocked(supabase.from).mockReturnValue({ select } as never);
 
-      const result = await getPromptRating("prompt-1");
-      expect(result.average).toBe(4.7);
-      expect(result.count).toBe(3);
+      const result = await getPromptRating("p-1");
+
+      expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(select).toHaveBeenCalledWith("rating_average, rating_count");
+      expect(eq).toHaveBeenCalledWith("id", "p-1");
+      expect(result).toEqual({ average: 4.5, count: 10 });
     });
 
-    it("returns null average and count 0 when database returns empty records", async () => {
-      vi.mocked(supabase.from).mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      } as never);
+    it("returns null average and 0 count if prompt not found or empty id", async () => {
+      const emptyResult = await getPromptRating("");
+      expect(emptyResult).toEqual({ average: null, count: 0 });
 
-      const result = await getPromptRating("prompt-test-id");
-      expect(result.average).toBeNull();
-      expect(result.count).toBe(0);
-    });
+      const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: { message: "not found" } });
+      const eq = vi.fn().mockReturnValue({ maybeSingle });
+      const select = vi.fn().mockReturnValue({ eq });
+      vi.mocked(supabase.from).mockReturnValue({ select } as never);
 
-    it("returns null average and count 0 for empty promptId", async () => {
-      const result = await getPromptRating("");
-      expect(result.average).toBeNull();
-      expect(result.count).toBe(0);
+      const result = await getPromptRating("missing");
+      expect(result).toEqual({ average: null, count: 0 });
     });
   });
 
-  describe("getPromptRatings (bulk)", () => {
-    it("returns a map with ratings for all requested prompt IDs", async () => {
-      vi.mocked(supabase.from).mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        in: vi.fn().mockResolvedValue({
-          data: [
-            { prompt_id: "p1", rating: 5 },
-            { prompt_id: "p1", rating: 5 },
-            { prompt_id: "p2", rating: 4 },
-          ],
-          error: null,
-        }),
-      } as never);
-
-      const ratingsMap = await getPromptRatings(["p1", "p2", "p3"]);
-      expect(ratingsMap.size).toBe(3);
-      expect(ratingsMap.get("p1")?.average).toBe(5.0);
-      expect(ratingsMap.get("p1")?.count).toBe(2);
-      expect(ratingsMap.get("p2")?.average).toBe(4.0);
-      expect(ratingsMap.get("p2")?.count).toBe(1);
-      expect(ratingsMap.get("p3")?.average).toBeNull();
-      expect(ratingsMap.get("p3")?.count).toBe(0);
-    });
-
-    it("handles empty prompt list", async () => {
+  describe("getPromptRatings", () => {
+    it("returns empty map when passed empty array", async () => {
       const result = await getPromptRatings([]);
       expect(result.size).toBe(0);
+      expect(supabase.from).not.toHaveBeenCalled();
+    });
+
+    it("queries prompts table in bulk for rating aggregates", async () => {
+      const promptRows = [
+        { id: "p1", rating_average: 4.8, rating_count: 15 },
+        { id: "p2", rating_average: null, rating_count: 0 },
+      ];
+      const inMock = vi.fn().mockResolvedValue({ data: promptRows, error: null });
+      const select = vi.fn().mockReturnValue({ in: inMock });
+      vi.mocked(supabase.from).mockReturnValue({ select } as never);
+
+      const result = await getPromptRatings(["p1", "p2"]);
+
+      expect(supabase.from).toHaveBeenCalledWith("prompts");
+      expect(select).toHaveBeenCalledWith("id, rating_average, rating_count");
+      expect(inMock).toHaveBeenCalledWith("id", ["p1", "p2"]);
+      expect(result.get("p1")).toEqual({ average: 4.8, count: 15 });
+      expect(result.get("p2")).toEqual({ average: null, count: 0 });
     });
   });
 
-  describe("ratePrompt & getUserPromptRating", () => {
-    it("clamps rating between 1 and 5 and saves to supabase", async () => {
-      const upsertMock = vi.fn().mockResolvedValue({ error: null });
-      const eqMock = vi.fn().mockResolvedValue({ data: [{ rating: 5 }], error: null });
-      const maybeSingleMock = vi.fn().mockResolvedValue({ data: { rating: 5 }, error: null });
+  describe("getUserPromptRating", () => {
+    it("fetches user's individual rating from prompt_ratings table", async () => {
+      const maybeSingle = vi.fn().mockResolvedValue({ data: { rating: 5 }, error: null });
+      const eq2 = vi.fn().mockReturnValue({ maybeSingle });
+      const eq1 = vi.fn().mockReturnValue({ eq: eq2 });
+      const select = vi.fn().mockReturnValue({ eq: eq1 });
+      vi.mocked(supabase.from).mockReturnValue({ select } as never);
 
-      vi.mocked(supabase.from).mockImplementation(() => {
-        return {
-          upsert: upsertMock,
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockImplementation((col: string) => {
-              if (col === "user_id") {
-                return {
-                  eq: vi.fn().mockReturnValue({
-                    maybeSingle: maybeSingleMock,
-                  }),
-                };
-              }
-              return eqMock();
-            }),
-          }),
-        } as never;
+      const rating = await getUserPromptRating("u1", "p1");
+
+      expect(supabase.from).toHaveBeenCalledWith("prompt_ratings");
+      expect(eq1).toHaveBeenCalledWith("user_id", "u1");
+      expect(eq2).toHaveBeenCalledWith("prompt_id", "p1");
+      expect(rating).toBe(5);
+    });
+  });
+
+  describe("ratePrompt", () => {
+    it("upserts user rating and returns updated prompt rating", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const maybeSingle = vi.fn().mockResolvedValue({
+        data: { rating_average: 5.0, rating_count: 1 },
+        error: null,
+      });
+      const eq = vi.fn().mockReturnValue({ maybeSingle });
+      const select = vi.fn().mockReturnValue({ eq });
+
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === "prompt_ratings") {
+          return { upsert: upsertMock } as never;
+        }
+        if (table === "prompts") {
+          return { select } as never;
+        }
+        return {} as never;
       });
 
-      const { ratingInfo, error } = await ratePrompt("user-1", "prompt-1", 5);
+      const { ratingInfo, error } = await ratePrompt("u1", "p1", 5);
+
       expect(error).toBeNull();
-      expect(ratingInfo.average).toBe(5.0);
-      expect(ratingInfo.count).toBe(1);
       expect(upsertMock).toHaveBeenCalledWith(
-        {
-          user_id: "user-1",
-          prompt_id: "prompt-1",
-          rating: 5,
-        },
+        { user_id: "u1", prompt_id: "p1", rating: 5 },
         { onConflict: "user_id,prompt_id" }
       );
       expect(upsertMock.mock.calls[0][0]).not.toHaveProperty("updated_at");
-
-      const userRating = await getUserPromptRating("user-1", "prompt-1");
-      expect(userRating).toBe(5);
+      expect(ratingInfo).toEqual({ average: 5.0, count: 1 });
     });
 
     it("clamps out-of-range ratings to 1..5", async () => {
       const upsertMock = vi.fn().mockResolvedValue({ error: null });
-      vi.mocked(supabase.from).mockReturnValue({
-        upsert: upsertMock,
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-      } as never);
+      const maybeSingle = vi.fn().mockResolvedValue({
+        data: { rating_average: 5.0, rating_count: 1 },
+        error: null,
+      });
+      const eq = vi.fn().mockReturnValue({ maybeSingle });
+      const select = vi.fn().mockReturnValue({ eq });
+
+      vi.mocked(supabase.from).mockImplementation((table: string) => {
+        if (table === "prompt_ratings") {
+          return { upsert: upsertMock } as never;
+        }
+        if (table === "prompts") {
+          return { select } as never;
+        }
+        return {} as never;
+      });
 
       await ratePrompt("user-1", "prompt-2", 10);
       expect(upsertMock).toHaveBeenCalledWith(

@@ -19,20 +19,19 @@ export async function getPromptRating(promptId: string): Promise<PromptRatingInf
 
   try {
     const { data, error } = await supabase
-      .from('prompt_ratings')
-      .select('rating')
-      .eq('prompt_id', promptId);
+      .from('prompts')
+      .select('rating_average, rating_count')
+      .eq('id', promptId)
+      .maybeSingle();
 
-    if (error || !data || data.length === 0) {
+    if (error || !data) {
       return { average: null, count: 0 };
     }
 
-    const ratingsList: number[] = data.map((r) => r.rating);
-    const sum = ratingsList.reduce((acc, r) => acc + r, 0);
-    const count = ratingsList.length;
-    const average = Number((sum / count).toFixed(1));
-
-    return { average, count };
+    return {
+      average: data.rating_average !== null && data.rating_average !== undefined ? Number(data.rating_average) : null,
+      count: data.rating_count ?? 0,
+    };
   } catch {
     return { average: null, count: 0 };
   }
@@ -40,6 +39,9 @@ export async function getPromptRating(promptId: string): Promise<PromptRatingInf
 
 /**
  * Get accuracy ratings for multiple prompts in bulk (for feeds & lists)
+ *
+ * Reads denormalized rating aggregates directly from `prompts`, transferring only
+ * one row per prompt ID regardless of total rating volume.
  */
 export async function getPromptRatings(promptIds: string[]): Promise<Map<string, PromptRatingInfo>> {
   const result = new Map<string, PromptRatingInfo>();
@@ -48,28 +50,24 @@ export async function getPromptRatings(promptIds: string[]): Promise<Map<string,
 
   try {
     const { data, error } = await supabase
-      .from('prompt_ratings')
-      .select('prompt_id, rating')
-      .in('prompt_id', uniqueIds);
+      .from('prompts')
+      .select('id, rating_average, rating_count')
+      .in('id', uniqueIds);
 
-    const grouped: Record<string, number[]> = {};
-
-    if (!error && data && data.length > 0) {
-      for (const row of data) {
-        if (!grouped[row.prompt_id]) grouped[row.prompt_id] = [];
-        grouped[row.prompt_id].push(row.rating);
-      }
-    }
-
-    for (const id of uniqueIds) {
-      if (grouped[id] && grouped[id].length > 0) {
-        const ratings = grouped[id];
-        const sum = ratings.reduce((acc, r) => acc + r, 0);
-        const count = ratings.length;
-        result.set(id, { average: Number((sum / count).toFixed(1)), count });
-      } else {
+    if (error || !data) {
+      for (const id of uniqueIds) {
         result.set(id, { average: null, count: 0 });
       }
+      return result;
+    }
+
+    const map = new Map(data.map((p) => [p.id, p]));
+    for (const id of uniqueIds) {
+      const row = map.get(id);
+      result.set(id, {
+        average: row?.rating_average !== null && row?.rating_average !== undefined ? Number(row.rating_average) : null,
+        count: row?.rating_count ?? 0,
+      });
     }
   } catch {
     for (const id of uniqueIds) {

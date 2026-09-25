@@ -149,6 +149,8 @@ export type Database = {
           bio: string | null
           cover_url: string | null
           created_at: string | null
+          follower_count: number
+          following_count: number
           full_name: string | null
           id: string
           updated_at: string | null
@@ -161,6 +163,8 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          follower_count?: number
+          following_count?: number
           full_name?: string | null
           id: string
           updated_at?: string | null
@@ -173,6 +177,8 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          follower_count?: number
+          following_count?: number
           full_name?: string | null
           id?: string
           updated_at?: string | null
@@ -339,7 +345,10 @@ export type Database = {
           fts: unknown | null
           id: string
           image_url: string
+          like_count: number
           prompt: string
+          rating_average: number | null
+          rating_count: number
           tags: string[] | null
           title: string
           updated_at: string
@@ -352,7 +361,10 @@ export type Database = {
           created_at?: string
           id?: string
           image_url: string
+          like_count?: number
           prompt: string
+          rating_average?: number | null
+          rating_count?: number
           tags?: string[] | null
           title: string
           updated_at?: string
@@ -365,7 +377,10 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string
+          like_count?: number
           prompt?: string
+          rating_average?: number | null
+          rating_count?: number
           tags?: string[] | null
           title?: string
           updated_at?: string

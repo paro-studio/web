@@ -96,6 +96,9 @@ export interface Prompt {
   image_url: string;
   ai_tool: string;
   tags?: string[];
+  view_count?: number;
+  copy_count?: number;
+  like_count?: number;
   created_at?: string;
   updated_at?: string;
 }
