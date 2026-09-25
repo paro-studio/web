@@ -174,11 +174,29 @@ export default function UploadPrompt() {
       return;
     }
 
+    if (title.length > 100) {
+      toast({
+        title: "Title too long",
+        description: "Please keep your title under 100 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // 5. Prompt text required
     if (!promptText.trim()) {
       toast({
         title: "Prompt required",
         description: "Please enter the prompt text",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (promptText.length > 15000) {
+      toast({
+        title: "Prompt too long",
+        description: "Please keep your prompt under 15000 characters",
         variant: "destructive",
       });
       return;
@@ -468,6 +486,7 @@ export default function UploadPrompt() {
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
                   required
+                  maxLength={15000}
                   rows={5}
                   className="bg-secondary/50 border-0 resize-none text-sm sm:text-base min-h-[120px] sm:min-h-[150px]"
                 />
