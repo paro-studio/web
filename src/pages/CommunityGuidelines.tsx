@@ -3,6 +3,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { DiscordIcon } from "@/components/prompts/brandIcons";
+import { ScrollReveal } from "@/components/ui/scroll-reveal";
 import {
   ShieldCheck,
   HeartHandshake,
@@ -77,7 +78,8 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     id: 4,
     icon: Lock,
     title: "4. Respect Privacy",
-    subtitle: "Think before sharing information about yourself or someone else.",
+    subtitle:
+      "Think before sharing information about yourself or someone else.",
     items: [
       "Don't post private contact information, passwords, addresses, or other sensitive information.",
       "Don't share private conversations or personal information without permission.",
@@ -201,7 +203,9 @@ export default function CommunityGuidelines() {
             </p>
 
             <p className="text-muted-foreground text-base sm:text-lg leading-relaxed pt-1">
-              Paro is a community built around sharing ideas, prompts, creativity, and knowledge. These guidelines help keep Paro a welcoming, useful, and respectful place for everyone.
+              Paro is a community built around sharing ideas, prompts,
+              creativity, and knowledge. These guidelines help keep Paro a
+              welcoming, useful, and respectful place for everyone.
             </p>
           </div>
 
@@ -212,101 +216,102 @@ export default function CommunityGuidelines() {
 
               if (section.isFeatured) {
                 return (
-                  <Card
-                    key={section.id}
-                    className="bg-gradient-to-br from-card/80 to-gold/5 backdrop-blur-md border-gold/30 p-6 sm:p-8 rounded-xl shadow-md text-center space-y-4"
-                  >
-                    <div className="h-12 w-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto text-gold">
-                      <Icon className="h-6 w-6" />
-                    </div>
-
-                    <h2 className="text-xl sm:text-2xl font-serif font-semibold text-foreground">
-                      {section.title}
-                    </h2>
-
-                    <p className="text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-                      {section.subtitle}
-                    </p>
-
-                    {section.callout && (
-                      <div className="p-4 sm:p-5 rounded-xl bg-gold/10 border border-gold/20 max-w-2xl mx-auto">
-                        <p className="text-gold font-semibold text-base sm:text-lg tracking-wide">
-                          {section.callout}
-                        </p>
+                  <ScrollReveal key={section.id}>
+                    <Card className="bg-gradient-to-br from-card/80 to-gold/5 backdrop-blur-md border-gold/30 p-6 sm:p-8 rounded-xl shadow-md text-center space-y-4">
+                      <div className="h-12 w-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto text-gold">
+                        <Icon className="h-6 w-6" />
                       </div>
-                    )}
 
-                    {section.closingNote && (
-                      <p className="text-foreground font-serif text-lg pt-2">
-                        {section.closingNote}
+                      <h2 className="text-xl sm:text-2xl font-serif font-semibold text-foreground">
+                        {section.title}
+                      </h2>
+
+                      <p className="text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
+                        {section.subtitle}
                       </p>
-                    )}
-                  </Card>
+
+                      {section.callout && (
+                        <div className="p-4 sm:p-5 rounded-xl bg-gold/10 border border-gold/20 max-w-2xl mx-auto">
+                          <p className="text-gold font-semibold text-base sm:text-lg tracking-wide">
+                            {section.callout}
+                          </p>
+                        </div>
+                      )}
+
+                      {section.closingNote && (
+                        <p className="text-foreground font-serif text-lg pt-2">
+                          {section.closingNote}
+                        </p>
+                      )}
+                    </Card>
+                  </ScrollReveal>
                 );
               }
 
               return (
-                <Card
-                  key={section.id}
-                  className="bg-card/60 backdrop-blur-md border-border/60 p-6 sm:p-8 rounded-xl shadow-sm hover:border-gold/30 transition-all duration-300"
-                >
-                  <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                    <div className="h-12 w-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center flex-shrink-0 text-gold">
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <div className="space-y-3 flex-1">
-                      <div>
-                        <h2 className="text-xl sm:text-2xl font-serif font-semibold text-foreground">
-                          {section.title}
-                        </h2>
-                        <p className="text-sm sm:text-base font-medium text-muted-foreground mt-1">
-                          {section.subtitle}
-                        </p>
+                <ScrollReveal key={section.id}>
+                  <Card className="bg-card/60 backdrop-blur-md border-border/60 p-6 sm:p-8 rounded-xl shadow-sm hover:border-gold/30 transition-all duration-300">
+                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                      <div className="h-12 w-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center flex-shrink-0 text-gold">
+                        <Icon className="h-6 w-6" />
                       </div>
-
-                      {section.badge && (
-                        <div className="inline-block px-3 py-1 bg-destructive/10 border border-destructive/20 text-destructive font-bold text-sm rounded-md">
-                          {section.badge}
-                        </div>
-                      )}
-
-                      {section.paragraph && (
-                        <p className="text-muted-foreground text-sm sm:text-base leading-relaxed pt-1">
-                          {section.paragraph}
-                        </p>
-                      )}
-
-                      {section.listHeader && (
-                        <p className="text-sm font-medium text-foreground">
-                          {section.listHeader}
-                        </p>
-                      )}
-
-                      {section.items && section.items.length > 0 && (
-                        <ul className="space-y-2 pt-1 text-muted-foreground text-sm sm:text-base">
-                          {section.items.map((item, idx) => (
-                            <li key={idx} className="flex items-start gap-2.5">
-                              <span className="h-1.5 w-1.5 rounded-full bg-gold mt-2 flex-shrink-0" />
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {section.footerParagraphs &&
-                        section.footerParagraphs.map((para, idx) => (
-                          <p
-                            key={idx}
-                            className={`text-sm sm:text-base text-muted-foreground leading-relaxed ${
-                              idx === 0 ? "pt-1" : ""
-                            }`}
-                          >
-                            {para}
+                      <div className="space-y-3 flex-1">
+                        <div>
+                          <h2 className="text-xl sm:text-2xl font-serif font-semibold text-foreground">
+                            {section.title}
+                          </h2>
+                          <p className="text-sm sm:text-base font-medium text-muted-foreground mt-1">
+                            {section.subtitle}
                           </p>
-                        ))}
+                        </div>
+
+                        {section.badge && (
+                          <div className="inline-block px-3 py-1 bg-destructive/10 border border-destructive/20 text-destructive font-bold text-sm rounded-md">
+                            {section.badge}
+                          </div>
+                        )}
+
+                        {section.paragraph && (
+                          <p className="text-muted-foreground text-sm sm:text-base leading-relaxed pt-1">
+                            {section.paragraph}
+                          </p>
+                        )}
+
+                        {section.listHeader && (
+                          <p className="text-sm font-medium text-foreground">
+                            {section.listHeader}
+                          </p>
+                        )}
+
+                        {section.items && section.items.length > 0 && (
+                          <ul className="space-y-2 pt-1 text-muted-foreground text-sm sm:text-base">
+                            {section.items.map((item, idx) => (
+                              <li
+                                key={idx}
+                                className="flex items-start gap-2.5"
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-gold mt-2 flex-shrink-0" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {section.footerParagraphs &&
+                          section.footerParagraphs.map((para, idx) => (
+                            <p
+                              key={idx}
+                              className={`text-sm sm:text-base text-muted-foreground leading-relaxed ${
+                                idx === 0 ? "pt-1" : ""
+                              }`}
+                            >
+                              {para}
+                            </p>
+                          ))}
+                      </div>
                     </div>
-                  </div>
-                </Card>
+                  </Card>
+                </ScrollReveal>
               );
             })}
           </div>
@@ -319,7 +324,9 @@ export default function CommunityGuidelines() {
                   Have questions or feedback?
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  If you have questions about these guidelines, suggestions for improvement, or need to reach out to our team, we're here to help.
+                  If you have questions about these guidelines, suggestions for
+                  improvement, or need to reach out to our team, we're here to
+                  help.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
@@ -349,4 +356,3 @@ export default function CommunityGuidelines() {
     </div>
   );
 }
-
