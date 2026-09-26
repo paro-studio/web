@@ -2,13 +2,9 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 
 interface ScrollRevealProps {
   children: ReactNode;
-  delay?: number;
 }
 
-export function ScrollReveal({
-  children,
-  delay = 0,
-}: ScrollRevealProps) {
+export function ScrollReveal({ children }: ScrollRevealProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -16,6 +12,13 @@ export function ScrollReveal({
     const element = elementRef.current;
 
     if (!element) return;
+
+    // Fallback for environments where IntersectionObserver is unavailable,
+    // such as jsdom or older browsers.
+    if (typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -26,7 +29,7 @@ export function ScrollReveal({
       },
       {
         threshold: 0.15,
-      }
+      },
     );
 
     observer.observe(element);
@@ -39,7 +42,6 @@ export function ScrollReveal({
   return (
     <div
       ref={elementRef}
-      style={{ transitionDelay: `${delay}ms` }}
       className={`transition-all duration-500 ease-out motion-reduce:transition-none ${
         isVisible
           ? "opacity-100 translate-y-0"
