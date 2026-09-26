@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, X, Sparkles, TrendingUp, Copy, Users, HelpCircle, Plus, Heart, Bookmark, DollarSign, MessageSquare, FileText, Github } from "lucide-react";
+import { Search, X, Sparkles, TrendingUp, Copy, Clock, Users, HelpCircle, Plus, Heart, Bookmark, DollarSign, MessageSquare, FileText, Github } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,7 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
 
   const sortOptions: { value: SortOption; label: string; icon: typeof TrendingUp }[] = [
     { value: "trending", label: "Trending", icon: TrendingUp },
+    { value: "newest", label: "Newest", icon: Clock },
     { value: "most_copied", label: "Most Copied", icon: Copy },
   ];
 

@@ -20,7 +20,27 @@ Browse the [open issues][issues] to find something to pick up. Anything tagged
 
 [issues]: https://github.com/paro-studio/web/issues
 
+### Picking up an issue
+
+Review is done by one person in their spare time, so these rules keep the queue
+moving for everyone:
+
+- **Wait to be assigned.** Comment on the issue with your plan, then wait until
+  a maintainer assigns it to you before you start. Pull requests for issues that
+  are not assigned to you may be closed without review.
+- **Two open pull requests at most.** Don't claim another issue until one of
+  yours is merged or closed.
+- **Agree the approach for big changes.** Anything labelled `P0` or `P1`, or
+  that touches more than a handful of files, needs the approach agreed in the
+  issue before any code is written. A large PR that arrives before that
+  conversation will be sent back.
+
+Small, focused pull requests get merged much faster than large ones.
+
 ## Setup
+
+Use the Node version in [`.nvmrc`](.nvmrc), which is what CI runs. With nvm,
+`nvm use` picks it up.
 
 ```bash
 git clone https://github.com/paro-studio/web.git
@@ -32,8 +52,8 @@ npm run dev                  # http://localhost:8080
 
 You need your own Supabase project. Create a free one, open the SQL Editor, and
 run [`supabase/schema.sql`](supabase/schema.sql). That builds every table,
-policy, function, and storage bucket in one go. Then enable Email under
-Authentication, Providers, and copy your Project URL and anon key into
+policy, function, and storage bucket in one go. Then configure Google OAuth
+and the allowed return URL, and copy your Project URL and anon key into
 `.env.local`. Full steps are in **Backend setup** in the [README](README.md).
 
 Once you have signed up in the app, run [`supabase/seed.sql`](supabase/seed.sql)

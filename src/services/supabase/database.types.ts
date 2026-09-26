@@ -10,7 +10,32 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -124,6 +149,8 @@ export type Database = {
           bio: string | null
           cover_url: string | null
           created_at: string | null
+          follower_count: number
+          following_count: number
           full_name: string | null
           id: string
           updated_at: string | null
@@ -136,6 +163,8 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          follower_count?: number
+          following_count?: number
           full_name?: string | null
           id: string
           updated_at?: string | null
@@ -148,6 +177,8 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          follower_count?: number
+          following_count?: number
           full_name?: string | null
           id?: string
           updated_at?: string | null
@@ -157,52 +188,31 @@ export type Database = {
         }
         Relationships: []
       }
-      prompts: {
+      prompt_counter_events: {
         Row: {
-          ai_tool: string
-          copy_count: number
-          created_at: string
-          id: string
-          image_url: string
-          prompt: string
-          tags: string[] | null
-          title: string
-          updated_at: string
-          user_id: string
-          view_count: number
+          actor: string
+          counted_at: string
+          kind: string
+          prompt_id: string
         }
         Insert: {
-          ai_tool: string
-          copy_count?: number
-          created_at?: string
-          id?: string
-          image_url: string
-          prompt: string
-          tags?: string[] | null
-          title: string
-          updated_at?: string
-          user_id: string
-          view_count?: number
+          actor: string
+          counted_at?: string
+          kind: string
+          prompt_id: string
         }
         Update: {
-          ai_tool?: string
-          copy_count?: number
-          created_at?: string
-          id?: string
-          image_url?: string
-          prompt?: string
-          tags?: string[] | null
-          title?: string
-          updated_at?: string
-          user_id?: string
-          view_count?: number
+          actor?: string
+          counted_at?: string
+          kind?: string
+          prompt_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "prompts_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "prompt_counter_events_prompt_id_fkey"
+            columns: ["prompt_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "prompts"
             referencedColumns: ["id"]
           },
         ]
@@ -249,35 +259,6 @@ export type Database = {
           },
         ]
       }
-      prompt_uploads: {
-        Row: {
-          created_at: string
-          id: string
-          prompt_id: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          prompt_id?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          prompt_id?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prompt_uploads_prompt_id_fkey"
-            columns: ["prompt_id"]
-            isOneToOne: false
-            referencedRelation: "prompts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       prompt_reports: {
         Row: {
           created_at: string
@@ -313,6 +294,102 @@ export type Database = {
           },
           {
             foreignKeyName: "prompt_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prompt_uploads: {
+        Row: {
+          created_at: string
+          id: string
+          prompt_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          prompt_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          prompt_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_uploads_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "prompts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_uploads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prompts: {
+        Row: {
+          ai_tool: string
+          copy_count: number
+          created_at: string
+          fts: unknown | null
+          id: string
+          image_url: string
+          like_count: number
+          prompt: string
+          rating_average: number | null
+          rating_count: number
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+          view_count: number
+        }
+        Insert: {
+          ai_tool: string
+          copy_count?: number
+          created_at?: string
+          id?: string
+          image_url: string
+          like_count?: number
+          prompt: string
+          rating_average?: number | null
+          rating_count?: number
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+          view_count?: number
+        }
+        Update: {
+          ai_tool?: string
+          copy_count?: number
+          created_at?: string
+          id?: string
+          image_url?: string
+          like_count?: number
+          prompt?: string
+          rating_average?: number | null
+          rating_count?: number
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompts_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -361,8 +438,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_prompt_counter: {
+        Args: {
+          counter_actor: string
+          counter_kind: string
+          counter_window: string
+          target_prompt: string
+        }
+        Returns: boolean
+      }
       increment_copy_count: { Args: { prompt_id: string }; Returns: undefined }
       increment_view_count: { Args: { prompt_id: string }; Returns: undefined }
+      prompt_counter_actor: { Args: never; Returns: string }
+      prompt_image_quota_ok: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
@@ -381,12 +469,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -410,11 +498,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -435,11 +523,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -460,11 +548,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -477,11 +565,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -491,6 +579,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

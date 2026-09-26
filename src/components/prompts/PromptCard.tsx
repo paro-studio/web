@@ -1,6 +1,8 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
+import { copyPromptText } from "@/lib/copyPromptText";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
+import { Eye, Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +31,6 @@ import {
 interface PromptCardProps {
   id: string;
   title: string;
-  promptText: string;
   imageUrl: string;
   toolUsed: string;
   viewCount?: number | null;
@@ -68,7 +69,6 @@ interface PromptCardProps {
 export function PromptCard({
   id,
   title,
-  promptText,
   imageUrl,
   toolUsed,
   viewCount,
@@ -90,15 +90,17 @@ export function PromptCard({
 }: PromptCardProps) {
   const hasRatings = typeof ratingCount === "number" && ratingCount > 0 && typeof accuracyRating === "number";
   const [copied, setCopied] = useState(false);
-  const [localLiked, setLocalLiked] = useState(isLiked);
-  const [localSaved, setLocalSaved] = useState(isSaved);
-  const [localLikeCount, setLocalLikeCount] = useState(likeCount ?? 0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { user, profile } = useAuth();
+  const likeMutation = useSocialMutation("like", user?.id, id, onLikeChange);
+  const saveMutation = useSocialMutation("save", user?.id, id, onSaveChange);
+  const localLiked = likeMutation.pending?.active ?? isLiked;
+  const localSaved = saveMutation.pending?.active ?? isSaved;
+  const localLikeCount = likeMutation.pending?.count ?? likeCount ?? 0;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { copyPromptLink } = usePromptShare();
@@ -106,16 +108,35 @@ export function PromptCard({
   // Only the creator can delete; everyone else gets Report in that slot.
   const isOwner = !!user && !!profile && profile.id === creator.id;
 
+  // Every action that needs an account opens the sign in dialog when the page
+  // provides one. The toast is only a fallback for a card rendered without it.
+  const askToSignIn = (action: string) => {
+    if (onLoginRequired) {
+      onLoginRequired();
+      return;
+    }
+    toast({ title: "Sign in required", description: `Please sign in to ${action}` });
+  };
+
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (!user) {
-      onLoginRequired?.();
+      askToSignIn("copy prompts");
       return;
     }
 
-    await navigator.clipboard.writeText(promptText);
+    // Static import on purpose. Anything awaited before copyPromptText starts
+    // the clipboard write can make Safari treat it as outside the tap.
+    if (!(await copyPromptText(id))) {
+      toast({
+        title: "Couldn't copy the prompt",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCopied(true);
 
     // Increment copy count in Supabase
@@ -130,25 +151,11 @@ export function PromptCard({
     e.stopPropagation();
 
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to like prompts",
-      });
+      askToSignIn("like prompts");
       return;
     }
 
-    const newLiked = !localLiked;
-    setLocalLiked(newLiked);
-    setLocalLikeCount((prev) => (newLiked ? (prev ?? 0) + 1 : Math.max(0, (prev ?? 0) - 1)));
-
-    const { toggleLike } = await import('@/services/supabase/likes');
-    await toggleLike(user.id, id);
-
-    // Invalidate queries to refresh data
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
-    queryClient.invalidateQueries({ queryKey: ['liked-prompts', user.id] });
-
-    onLikeChange?.();
+    likeMutation.toggle(localLiked, localLikeCount);
   };
 
   const handleSave = async (e: React.MouseEvent) => {
@@ -156,28 +163,11 @@ export function PromptCard({
     e.stopPropagation();
 
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to save prompts",
-      });
+      askToSignIn("save prompts");
       return;
     }
 
-    const newSaved = !localSaved;
-    setLocalSaved(newSaved);
-
-    const { toggleSave } = await import('@/services/supabase/saves');
-    await toggleSave(user.id, id);
-    
-    // Invalidate queries to refresh data
-    queryClient.invalidateQueries({ queryKey: ['prompts'] });
-    queryClient.invalidateQueries({ queryKey: ['saved-prompts', user.id] });
-    
-    if (newSaved) {
-      toast({ title: "Saved to collection" });
-    }
-
-    onSaveChange?.();
+    saveMutation.toggle(localSaved);
   };
 
   const handleCopyLink = async (e: React.MouseEvent) => {
@@ -230,7 +220,7 @@ export function PromptCard({
 
   return (
     <article className="group masonry-item">
-      <div className="relative overflow-hidden rounded-sm bg-card hover-lift">
+      <div className="relative overflow-hidden rounded-xl bg-card hover-lift">
         {/* Image */}
         <Link to={`/prompt/${id}`} className="block">
           <div className="relative aspect-auto">
@@ -387,7 +377,7 @@ export function PromptCard({
           className={cn(
             "absolute top-2 sm:top-3 left-2 sm:left-3 p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 touch-target flex items-center justify-center",
             "opacity-100 lg:opacity-0 lg:group-hover:opacity-100",
-            copied && "bg-gold/90"
+            copied && "bg-success text-success-foreground"
           )}
           title="Copy prompt"
           aria-label={copied ? "Copied" : "Copy prompt"}
@@ -595,6 +585,10 @@ export function PromptCard({
 
         {/* Stats */}
         <div className="flex items-center gap-3 sm:gap-4 mt-1.5 sm:mt-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-0.5 sm:gap-1" title="Views">
+            <Eye className="h-3 w-3" />
+            <span className="tabular-nums">{(viewCount ?? 0).toLocaleString()}</span>
+          </span>
           <span className="flex items-center gap-0.5 sm:gap-1" title="Copies">
             <Copy className="h-3 w-3" />
             <span className="tabular-nums">{(copyCount ?? 0).toLocaleString()}</span>

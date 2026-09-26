@@ -1,9 +1,16 @@
+import { useSocialMutation } from "@/hooks/useSocialMutation";
+import { QueryError } from "@/components/QueryError";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { getProfile } from "@/services/supabase/profiles";
+import { getUserPrompts } from "@/services/supabase/prompts";
+import { getLikeCounts, getLikedPromptIds } from "@/services/supabase/likes";
+import { getSavedPromptIds } from "@/services/supabase/saves";
+import { getPromptRatings } from "@/services/supabase/ratings";
+import { getFollowerCount, isFollowing as checkIsFollowing } from "@/services/supabase/follows";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PromptCard } from "@/components/prompts/PromptCard";
@@ -14,18 +21,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { PromptWithDetails } from "@/hooks/usePrompts";
-import { ExternalLink, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-
 
 export default function Profile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile: currentUserProfile } = useAuth();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followerCount, setFollowerCount] = useState(0);
   const [editingPrompt, setEditingPrompt] = useState<PromptWithDetails | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
@@ -51,27 +54,20 @@ export default function Profile() {
     enabled: !!id,
   });
 
-  const { data: prompts, isLoading: promptsLoading, refetch: refetchPrompts } = useQuery({
+  const { data: prompts, isLoading: promptsLoading, isError: promptsError, isFetching: promptsFetching, refetch: refetchPrompts } = useQuery({
     queryKey: ["profile-prompts", profile?.id, currentUserProfile?.id],
     queryFn: async () => {
       if (!profile?.id) return [];
 
       // Get prompts from Supabase
-      const { getUserPrompts } = await import('@/services/supabase/prompts');
       const { prompts: userPrompts, error } = await getUserPrompts(profile.id);
 
-      if (error) {
-        console.error('Error fetching user prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Sort by newest first
       userPrompts.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
       // Enrich in bulk — four queries for the whole grid, not four per prompt.
-      const { getLikeCounts, getLikedPromptIds } = await import('@/services/supabase/likes');
-      const { getSavedPromptIds } = await import('@/services/supabase/saves');
-      const { getPromptRatings } = await import('@/services/supabase/ratings');
 
       const promptIds = userPrompts.map(p => p.id);
       const viewerId = currentUserProfile?.id;
@@ -92,7 +88,6 @@ export default function Profile() {
         return {
           id: p.id,
           title: p.title,
-          promptText: p.promptText,
           imageUrl: p.imageUrl,
           toolUsed: p.toolUsed,
           viewCount: p.viewCount || 0,
@@ -131,7 +126,6 @@ export default function Profile() {
     queryFn: async () => {
       if (!profile?.id) return { count: 0, following: false };
       
-      const { getFollowerCount, isFollowing: checkIsFollowing } = await import('@/services/supabase/follows');
       const count = await getFollowerCount(profile.id);
       
       if (currentUserProfile) {
@@ -144,33 +138,19 @@ export default function Profile() {
     enabled: !!profile?.id,
   });
 
-  useEffect(() => {
-    if (followerData) {
-      setFollowerCount(followerData.count);
-      setIsFollowing(followerData.following);
-    }
-  }, [followerData]);
+  const followMutation = useSocialMutation("follow", currentUserProfile?.id, profile?.id);
+  const isFollowing = followMutation.pending?.active ?? followerData?.following ?? false;
+  const followerCount = followMutation.pending?.count ?? followerData?.count ?? 0;
 
   const handleFollow = async () => {
     if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to follow creators",
-      });
+      setAuthModalOpen(true);
       return;
     }
 
     if (!currentUserProfile || !profile?.id) return;
 
-    const newFollowing = !isFollowing;
-    setIsFollowing(newFollowing);
-    setFollowerCount((prev) => (newFollowing ? prev + 1 : prev - 1));
-
-    const { toggleFollow } = await import('@/services/supabase/follows');
-    await toggleFollow(currentUserProfile.id, profile.id);
-    
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ['follower-count', profile.id] });
+    followMutation.toggle(isFollowing, followerCount);
   };
 
 
@@ -286,11 +266,12 @@ export default function Profile() {
           <div className="max-w-[1920px] mx-auto">
             <h2 className="font-serif text-xl sm:text-2xl mb-4 sm:mb-6">Prompts</h2>
 
-            {promptsLoading ? (
+            {promptsError && <QueryError resource="profile prompts" onRetry={() => { void refetchPrompts(); }} retrying={promptsFetching} />}
+            {promptsError && !prompts ? null : promptsLoading ? (
               <div className="masonry-grid">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="masonry-item">
-                    <Skeleton className="aspect-[3/4] rounded-sm" />
+                    <Skeleton className="aspect-[3/4] rounded-xl" />
                   </div>
                 ))}
               </div>
@@ -325,7 +306,6 @@ export default function Profile() {
                     <PromptCard
                       id={prompt.id}
                       title={prompt.title}
-                      promptText={prompt.promptText}
                       imageUrl={prompt.imageUrl}
                       toolUsed={prompt.toolUsed}
                       viewCount={prompt.viewCount}
@@ -362,7 +342,6 @@ export default function Profile() {
           prompt={{
             id: editingPrompt.id,
             title: editingPrompt.title,
-            prompt_text: editingPrompt.promptText,
             image_url: editingPrompt.imageUrl,
             tool_used: editingPrompt.toolUsed,
             tags: editingPrompt.tags,

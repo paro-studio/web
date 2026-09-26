@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -286,7 +287,7 @@ export default function Settings() {
       <div className="min-h-screen min-h-[100dvh] bg-background">
         <Navbar />
         <main className="pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 text-center py-12 sm:py-16">
-          <p className="text-sm sm:text-base text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );
@@ -328,7 +329,7 @@ export default function Settings() {
                 />
                 <div
                   onClick={() => coverInputRef.current?.click()}
-                  className="relative w-full h-40 bg-secondary/50 rounded-sm overflow-hidden cursor-pointer group"
+                  className="relative w-full h-40 bg-secondary/50 rounded-xl overflow-hidden cursor-pointer group"
                 >
                   {(coverPreview || coverUrl) ? (
                     <>
@@ -388,6 +389,7 @@ export default function Settings() {
                 <Input
                   id="username"
                   placeholder="username"
+                  maxLength={30}
                   value={username}
                   onChange={(e) => {
                     setUsername(e.target.value.toLowerCase());
@@ -408,6 +410,7 @@ export default function Settings() {
                 <Input
                   id="displayName"
                   placeholder="Your Name"
+                  maxLength={50}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="bg-secondary/50 border-0"

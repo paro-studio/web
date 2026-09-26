@@ -12,6 +12,8 @@
 
 ## Checklist
 
+- [ ] The linked issue was assigned to me before I started
+- [ ] I have no more than two open pull requests, including this one
 - [ ] `npm run lint` passes
 - [ ] `npm run typecheck` passes
 - [ ] `npm test` passes

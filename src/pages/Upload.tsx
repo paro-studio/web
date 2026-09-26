@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -21,7 +22,7 @@ import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
 import { FEATURED_AI_TOOL, OTHER_AI_TOOLS } from "@/lib/aiTools";
 import { checkDailyUploadLimit, type DailyUploadLimitStatus } from "@/services/supabase/prompts";
-import { MAX_SOURCE_SIZE } from "@/services/supabase/storage";
+import { ALLOWED_TYPES, MAX_SOURCE_SIZE } from "@/services/supabase/storage";
 
 export default function UploadPrompt() {
   const navigate = useNavigate();
@@ -71,10 +72,11 @@ export default function UploadPrompt() {
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      clearImage();
       toast({
         title: "Invalid file type",
-        description: "Please select an image file",
+        description: "Please select a JPEG, PNG, or WebP image",
         variant: "destructive",
       });
       return;
@@ -337,7 +339,7 @@ export default function UploadPrompt() {
       <div className="min-h-screen min-h-[100dvh] bg-background">
         <Navbar />
         <main className="pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 text-center py-12 sm:py-16">
-          <p className="text-sm sm:text-base text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );
@@ -408,7 +410,7 @@ export default function UploadPrompt() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={ALLOWED_TYPES.join(",")}
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -417,7 +419,7 @@ export default function UploadPrompt() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-sm flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
+                    className="w-full h-36 sm:h-48 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2 sm:gap-3 hover:border-accent transition-colors bg-secondary/30 touch-target"
                   >
                     <ImageIcon className="h-8 sm:h-10 w-8 sm:w-10 text-muted-foreground" />
                     <div className="text-center px-4">
@@ -430,7 +432,7 @@ export default function UploadPrompt() {
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-sm"
+                      className="w-full max-h-48 sm:max-h-64 object-contain bg-secondary rounded-xl"
                     />
                     <button
                       type="button"

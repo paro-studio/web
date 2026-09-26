@@ -22,7 +22,6 @@ export function ImageCard({ item, onLikeChange, onSaveChange, onLoginRequired, o
     <PromptCard
       id={data.id}
       title={data.title}
-      promptText={data.prompt_text}
       imageUrl={data.image_url}
       toolUsed={data.tool_used}
       viewCount={data.view_count}

@@ -47,6 +47,10 @@
     --destructive: 0 45% 55%;
     --destructive-foreground: 40 33% 98%;
 
+    /* Success - WCAG AA compliant green (5.02:1 contrast) */
+    --success: 142 72% 29%;
+    --success-foreground: 40 33% 98%;
+
     /* Borders - Subtle warm */
     --border: 35 20% 88%;
     --input: 35 20% 88%;
@@ -114,6 +118,9 @@
 
     --destructive: 0 50% 45%;
     --destructive-foreground: 38 45% 90%;
+
+    --success: 142 65% 34%;
+    --success-foreground: 40 33% 98%;
 
     --border: 220 12% 16%;
     --input: 220 12% 16%;

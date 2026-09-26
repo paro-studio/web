@@ -96,6 +96,9 @@ export interface Prompt {
   image_url: string;
   ai_tool: string;
   tags?: string[];
+  view_count?: number;
+  copy_count?: number;
+  like_count?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -151,13 +154,51 @@ export async function createPrompt(data: CreatePromptData) {
 }
 
 /**
- * Get prompt by ID
- * Should be accessible publicly (read access for all)
+ * The prompt text is never loaded with the feed, prompt pages or profiles, only
+ * by getPromptText when a signed in user copies it or edits their own prompt.
+ * Signed out visitors see the image, title, tags and counts, and get the prompt
+ * by signing in and copying.
+ *
+ * The database enforces the signed out half: the anon role cannot read
+ * `prompts.prompt` at all, so a signed out `select('*')` on prompts fails
+ * outright. List columns and leave `prompt` out.
+ */
+export const PROMPT_COLUMNS =
+  'id, user_id, title, image_url, ai_tool, tags, created_at, updated_at, view_count, copy_count' as const;
+
+type PromptListRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  image_url: string;
+  ai_tool: string;
+  tags: string[] | null;
+  created_at: string;
+  view_count: number;
+  copy_count: number;
+};
+
+function normalizePromptRow(p: PromptListRow): NormalizedPrompt {
+  return {
+    id: p.id,
+    userId: p.user_id,
+    title: p.title,
+    imageUrl: p.image_url,
+    toolUsed: p.ai_tool,
+    tags: p.tags || [],
+    createdAt: p.created_at,
+    viewCount: p.view_count || 0,
+    copyCount: p.copy_count || 0,
+  };
+}
+
+/**
+ * Get prompt by ID, without its text.
  */
 export async function getPrompt(id: string) {
   const { data, error } = await supabase
     .from('prompts')
-    .select('*')
+    .select(PROMPT_COLUMNS)
     .eq('id', id)
     .single();
 
@@ -175,12 +216,15 @@ export async function getPrompt(id: string) {
   return { prompt: data, error: null };
 }
 
+/**
+ * A user's prompts, newest first, without their text.
+ */
 export async function getUserPrompts(
   userId: string
 ): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
   const { data, error } = await supabase
     .from('prompts')
-    .select('*')
+    .select(PROMPT_COLUMNS)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -189,33 +233,18 @@ export async function getUserPrompts(
     return { prompts: [], error };
   }
 
-  // Normalize to camelCase (match PromptWithDetails shape)
-  const normalizedPrompts: NormalizedPrompt[] = (data || []).map(p => ({
-    id: p.id,
-    userId: p.user_id,
-    title: p.title,
-    promptText: p.prompt,
-    imageUrl: p.image_url,
-    toolUsed: p.ai_tool,
-    tags: p.tags || [],
-    createdAt: p.created_at,
-    viewCount: p.view_count || 0,
-    copyCount: p.copy_count || 0,
-  }));
-
-  return { prompts: normalizedPrompts, error: null };
+  return { prompts: (data || []).map(normalizePromptRow), error: null };
 }
 
 /**
- * Get all prompts (for main feed)
- * Should be accessible publicly (read access for all)
+ * The newest prompts, for the feed, without their text.
  */
 export async function getAllPrompts(
   limit = 50
 ): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
   const { data, error } = await supabase
     .from('prompts')
-    .select('*')
+    .select(PROMPT_COLUMNS)
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -228,21 +257,107 @@ export async function getAllPrompts(
     return { prompts: [], error };
   }
 
-  // Normalize to camelCase (match PromptWithDetails shape)
-  const normalizedPrompts: NormalizedPrompt[] = (data || []).map(p => ({
-    id: p.id,
-    userId: p.user_id,
-    title: p.title,
-    promptText: p.prompt,
-    imageUrl: p.image_url,
-    toolUsed: p.ai_tool,
-    tags: p.tags || [],
-    createdAt: p.created_at,
-    viewCount: p.view_count || 0,
-    copyCount: p.copy_count || 0,
-  }));
+  return { prompts: (data || []).map(normalizePromptRow), error: null };
+}
+
+/**
+ * One prompt's text, for Copy and for editing your own prompt. Only works
+ * signed in; for anyone else the database refuses the column.
+ */
+export async function getPromptText(id: string): Promise<{ text: string | null; error: PostgrestError | null }> {
+  const { data, error } = await supabase
+    .from('prompts')
+    .select('prompt')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('❌ getPromptText: Fetch failed:', error);
+    return { text: null, error };
+  }
+
+  return { text: data?.prompt ?? null, error: null };
+}
+
+export interface SearchPromptsOptions {
+  query?: string;
+  tags?: string[];
+  limit?: number;
+}
+
+/**
+ * Search prompts using database full-text search index (prompts_fts_idx)
+ * and tags array index (prompts_tags_idx)
+ */
+export async function searchPrompts(
+  options: SearchPromptsOptions = {}
+): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
+  const { query, tags, limit = 50 } = options;
+
+  let queryBuilder = supabase
+    .from('prompts')
+    .select(PROMPT_COLUMNS);
+
+  if (query && query.trim()) {
+    // Prefix match each word, so "cyber" still finds "cyberpunk". Anything
+    // that is not a letter or digit is dropped, because to_tsquery treats
+    // characters like & | ! : ( ) as syntax and throws on stray ones.
+    const terms = query
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(Boolean)
+      .map((word) => `${word}:*`);
+
+    // Nothing searchable left, e.g. a query of only punctuation.
+    if (terms.length === 0) return { prompts: [], error: null };
+
+    queryBuilder = queryBuilder.textSearch('fts', terms.join(' & '), {
+      config: 'english',
+    });
+  }
+
+  if (tags && tags.length > 0) {
+    queryBuilder = queryBuilder.overlaps('tags', tags);
+  }
+
+  const { data, error } = await queryBuilder
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('❌ searchPrompts: Fetch failed:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+    return { prompts: [], error };
+  }
+
+  const normalizedPrompts: NormalizedPrompt[] = (data || []).map(normalizePromptRow);
 
   return { prompts: normalizedPrompts, error: null };
+}
+
+/**
+ * Owner ids of the most recent prompts, newest first, one entry per prompt.
+ * For ranking creators, where the prompt rows themselves are not needed.
+ */
+export async function getRecentPromptCreatorIds(
+  limit = 200
+): Promise<{ userIds: string[]; error: PostgrestError | null }> {
+  const { data, error } = await supabase
+    .from('prompts')
+    .select('user_id')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('❌ getRecentPromptCreatorIds: Fetch failed:', error);
+    return { userIds: [], error };
+  }
+
+  return { userIds: (data || []).map(p => p.user_id), error: null };
 }
 
 /**
@@ -287,6 +402,9 @@ export async function incrementCopyCount(promptId: string): Promise<{ error: Pos
  * Backed by a SECURITY DEFINER function, because the UPDATE policy on
  * `prompts` only lets a row's owner write to it — but every viewer needs
  * to be able to bump this counter.
+ *
+ * Note: Callers should deduplicate views per visitor session/window using
+ * `recordViewIfEligible` in `@/lib/viewTracking` before calling this function.
  */
 export async function incrementViewCount(promptId: string): Promise<{ error: PostgrestError | null }> {
   const { error } = await supabase.rpc('increment_view_count', {

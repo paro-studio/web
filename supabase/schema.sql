@@ -844,6 +844,716 @@ create policy "Users can view their own prompt uploads"
   using (auth.uid() = user_id);
 
 -- --------------------------------------------------------------------------
+-- 20260915120000_throttle_prompt_counters.sql
+-- --------------------------------------------------------------------------
+
+-- Throttle the view and copy counters.
+--
+-- increment_view_count and increment_copy_count are security definer so any
+-- viewer can bump a prompt's counters. They also had no identity check and no
+-- limit, so anyone holding the public anon key could call them in a loop and
+-- push any prompt up the trending feed, which sorts on view_count.
+--
+-- The column lockdown in 20260905000000 stops direct writes to the counters.
+-- This closes the other path, the functions themselves.
+--
+-- Rules:
+--
+--   Copies  count only for signed in users, once per user per prompt per 24
+--           hours. The UI already sends signed out users to sign in before
+--           copying, so an anonymous copy call is ignored.
+--
+--   Views   signed in: once per user per prompt per 30 minutes.
+--           signed out: once per visitor IP per prompt per 30 minutes, and no
+--           more than 30 signed out views per prompt per hour in total. The IP
+--           comes from a request header, which is best effort, so the hourly
+--           cap is what bounds inflation if the header is ever spoofed.
+--
+-- The 30 minute view window matches the client side dedupe in
+-- src/lib/viewTracking.ts, so honest visitors are counted exactly as before.
+--
+-- Signatures are unchanged, (prompt_id uuid) returns void, so the app needs no
+-- change and existing grants carry over.
+
+-- ---------------------------------------------------------------------------
+-- Counter events
+-- ---------------------------------------------------------------------------
+--
+-- One row per actor per prompt per kind. counted_at moves forward each time the
+-- actor is counted again, so the table stays small.
+--
+-- actor is 'u:<user id>' for signed in callers and 'ip:<md5 of the IP>' for
+-- signed out ones. The IP is hashed so raw addresses are never stored.
+
+create table if not exists public.prompt_counter_events (
+  prompt_id  uuid        not null references public.prompts (id) on delete cascade,
+  kind       text        not null check (kind in ('view', 'copy')),
+  actor      text        not null,
+  counted_at timestamptz not null default now(),
+  primary key (prompt_id, kind, actor)
+);
+
+create index if not exists prompt_counter_events_counted_at_idx
+  on public.prompt_counter_events (counted_at);
+
+-- Only the two functions below touch this table. RLS on with no policies, plus
+-- no table privileges for the API roles, means clients can neither read nor
+-- write it.
+alter table public.prompt_counter_events enable row level security;
+
+revoke all on public.prompt_counter_events from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Shared logic
+-- ---------------------------------------------------------------------------
+--
+-- Returns true when this call should be counted, and records it. The insert
+-- and the window check are one statement, so two simultaneous calls from the
+-- same actor cannot both be counted.
+
+create or replace function public.claim_prompt_counter(
+  target_prompt uuid,
+  counter_kind  text,
+  counter_actor text,
+  counter_window interval
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  claimed boolean;
+begin
+  insert into public.prompt_counter_events as e (prompt_id, kind, actor, counted_at)
+  values (target_prompt, counter_kind, counter_actor, now())
+  on conflict (prompt_id, kind, actor) do update
+    set counted_at = now()
+    where e.counted_at < now() - counter_window
+  returning true into claimed;
+
+  -- Occasionally drop rows too old to affect any window, so the table does not
+  -- grow without bound. Cheap enough to do inline at this traffic.
+  if random() < 0.01 then
+    delete from public.prompt_counter_events
+     where counted_at < now() - interval '2 days';
+  end if;
+
+  return coalesce(claimed, false);
+end;
+$$;
+
+-- Internal helper. Nothing outside the two counter functions should call it.
+revoke all on function public.claim_prompt_counter(uuid, text, text, interval)
+  from public, anon, authenticated;
+
+-- The caller's identity: their user id when signed in, otherwise a hash of the
+-- client IP PostgREST passes through. Falls back to 'ip:unknown' when there is
+-- no header, which then shares one bucket and the hourly cap.
+create or replace function public.prompt_counter_actor()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  headers json;
+  ip text;
+begin
+  if uid is not null then
+    return 'u:' || uid::text;
+  end if;
+
+  begin
+    headers := nullif(current_setting('request.headers', true), '')::json;
+  exception when others then
+    headers := null;
+  end;
+
+  ip := trim(split_part(coalesce(headers ->> 'x-forwarded-for', headers ->> 'x-real-ip', ''), ',', 1));
+
+  if ip = '' then
+    return 'ip:unknown';
+  end if;
+
+  return 'ip:' || md5(ip);
+end;
+$$;
+
+revoke all on function public.prompt_counter_actor()
+  from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The counters
+-- ---------------------------------------------------------------------------
+
+create or replace function public.increment_view_count(prompt_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target uuid := increment_view_count.prompt_id;
+  actor text;
+  recent_anonymous integer;
+begin
+  if not exists (select 1 from public.prompts p where p.id = target) then
+    return;
+  end if;
+
+  actor := public.prompt_counter_actor();
+
+  if actor like 'ip:%' then
+    select count(*) into recent_anonymous
+      from public.prompt_counter_events e
+     where e.prompt_id = target
+       and e.kind = 'view'
+       and e.actor like 'ip:%'
+       and e.counted_at > now() - interval '1 hour';
+
+    if recent_anonymous >= 30 then
+      return;
+    end if;
+  end if;
+
+  if public.claim_prompt_counter(target, 'view', actor, interval '30 minutes') then
+    update public.prompts p
+       set view_count = p.view_count + 1
+     where p.id = target;
+  end if;
+end;
+$$;
+
+create or replace function public.increment_copy_count(prompt_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target uuid := increment_copy_count.prompt_id;
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    return;
+  end if;
+
+  if not exists (select 1 from public.prompts p where p.id = target) then
+    return;
+  end if;
+
+  if public.claim_prompt_counter(target, 'copy', 'u:' || uid::text, interval '24 hours') then
+    update public.prompts p
+       set copy_count = p.copy_count + 1
+     where p.id = target;
+  end if;
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+-- 20260922120000_stop_clients_setting_created_at.sql
+-- --------------------------------------------------------------------------
+
+-- Stop clients choosing created_at on prompts and profiles.
+--
+-- created_at was in the column insert grants from 20260905000000, so anyone
+-- calling the API could pick it. Two things trusted that value:
+--
+--   1. The daily upload limit. log_prompt_upload logged each upload with
+--      coalesce(new.created_at, now()), and check_prompt_upload_limit only
+--      counts uploads since midnight UTC. A prompt dated last year was logged
+--      as last year and never counted, so the 3 per day limit could be skipped
+--      entirely.
+--   2. The Newest feed, which orders by created_at. A prompt dated 2099 stayed
+--      at the top forever.
+--
+-- The app never sends created_at. The column default fills it in, so nothing
+-- in the client changes.
+--
+-- Same revoke then grant pattern as 20260905000000. A column level revoke does
+-- nothing while a table level grant exists, and revoking the table privilege
+-- also drops the column ones, so the remaining columns are granted back one by
+-- one. The lists below are the previous ones minus created_at.
+
+revoke insert on public.prompts from anon, authenticated;
+
+grant insert (id, user_id, title, prompt, image_url, ai_tool, tags, updated_at)
+  on public.prompts to anon, authenticated;
+
+revoke insert on public.profiles from anon, authenticated;
+
+grant insert (id, username, full_name, avatar_url, cover_url, bio, website,
+              updated_at)
+  on public.profiles to anon, authenticated;
+
+-- Log the upload at the moment it happened, whatever the row says. Anything
+-- running as the table owner, like the service role, can still set
+-- created_at, and that must not be able to slip past the limit either.
+create or replace function public.log_prompt_upload()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.prompt_uploads (user_id, prompt_id, created_at)
+  values (new.user_id, new.id, now());
+  return new;
+end;
+$$;
+
+-- --------------------------------------------------------------------------
+-- 20260922120100_check_profile_fields.sql
+-- --------------------------------------------------------------------------
+
+-- Enforce profile field rules in the database, not just in the forms.
+--
+-- The anon key is public, so the forms in CompleteProfile.tsx and Settings.tsx
+-- are a convenience, not a control. Before this, the API accepted:
+--
+--   username    anything unique. Case, spaces and lookalike letters made room
+--               for impersonation: "Akshat", "akshat " or "аkshat" with a
+--               Cyrillic а were all distinct from "akshat"
+--   avatar_url  any URL. Avatars load on profiles, prompt pages and Top
+--   cover_url   Creators, so pointing one at your own server logs the IP of
+--               everyone who views them, with content we cannot moderate
+--   website     any string, including javascript: links. Not shown anywhere
+--               yet, locked down before it ever is
+--   full_name   no length limit
+--   bio
+--
+-- Limits sit above what the forms allow, so they are a backstop rather than a
+-- second copy of form validation. Every existing row already passes, checked
+-- against production on 2026-09-22.
+--
+-- Image URLs must be a file in the user's own folder in our storage bucket, or
+-- for avatars a Google profile photo, which is what a first sign in copies over.
+-- The host is matched as any *.supabase.co so contributors' own projects work.
+-- That still allows a file in someone else's Supabase project laid out the same
+-- way. Pinning the exact project host would close that too, but would need the
+-- host inside the migration.
+
+alter table public.profiles
+  add constraint profiles_username_format
+    check (username ~ '^[a-z0-9_]{3,30}$') not valid,
+  add constraint profiles_full_name_length
+    check (char_length(full_name) <= 100) not valid,
+  add constraint profiles_bio_length
+    check (char_length(bio) <= 500) not valid,
+  add constraint profiles_website_format
+    check (website ~ '^https?://' and char_length(website) <= 200) not valid,
+  add constraint profiles_avatar_url_source
+    check (
+      avatar_url ~ ('^https://[a-z0-9-]+\.supabase\.co/storage/v1/object/public/avatars/'
+                    || id::text || '/[^/?#]+(\?[^#]*)?$')
+      or avatar_url ~ '^https://lh[0-9]\.googleusercontent\.com/'
+    ) not valid,
+  add constraint profiles_cover_url_source
+    check (
+      cover_url ~ ('^https://[a-z0-9-]+\.supabase\.co/storage/v1/object/public/banners/'
+                   || id::text || '/[^/?#]+(\?[^#]*)?$')
+    ) not valid;
+
+-- Same approach as 20260905120000: validate against existing rows, and if any
+-- old row unexpectedly fails, keep the constraints for new writes rather than
+-- failing the whole migration.
+do $$
+begin
+  alter table public.profiles validate constraint profiles_username_format;
+  alter table public.profiles validate constraint profiles_full_name_length;
+  alter table public.profiles validate constraint profiles_bio_length;
+  alter table public.profiles validate constraint profiles_website_format;
+  alter table public.profiles validate constraint profiles_avatar_url_source;
+  alter table public.profiles validate constraint profiles_cover_url_source;
+exception
+  when check_violation then
+    raise notice 'Existing profiles break the new rules. Constraints are active for new writes but not validated against history.';
+end
+$$;
+
+-- --------------------------------------------------------------------------
+-- 20260922120200_limit_storage_uploads.sql
+-- --------------------------------------------------------------------------
+
+-- Limit what signed in users can put in the storage buckets.
+--
+-- The upload policies only checked that a file went into the user's own
+-- folder. Nothing checked the file name or how many files there were, so any
+-- signed in user could upload as many images as they liked to all three
+-- buckets, and all three are public. That is free image hosting, and on the
+-- free plan's 1 GB it is enough for one person to fill storage and break
+-- uploads for everyone.
+--
+--   avatars, banners   the app only ever writes {user_id}/avatar.jpg and
+--                      {user_id}/banner.jpg, overwriting in place. Those are
+--                      now the only names allowed
+--   prompt-images      each file belongs to a prompt, so a user may hold at
+--                      most as many files as they have prompts, plus a small
+--                      allowance for an upload whose prompt is still being
+--                      saved, or an edit whose old image is not yet deleted
+--
+-- Checked against production on 2026-09-22: avatars and banners only contain
+-- those two names, and no user has more than one prompt image beyond their
+-- prompt count.
+--
+-- These replace the policies from 20260101000000 of the same names. Only the
+-- insert and update checks change. Read and delete stay as they were.
+
+-- avatars --------------------------------------------------------------------
+
+drop policy if exists "Users can upload own avatar" on storage.objects;
+create policy "Users can upload own avatar"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'avatars'
+    and name = (auth.uid())::text || '/avatar.jpg'
+  );
+
+drop policy if exists "Users can update own avatar" on storage.objects;
+create policy "Users can update own avatar"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'avatars'
+    and (auth.uid())::text = (storage.foldername(name))[1]
+  )
+  with check (
+    bucket_id = 'avatars'
+    and name = (auth.uid())::text || '/avatar.jpg'
+  );
+
+-- banners --------------------------------------------------------------------
+
+drop policy if exists "Users can upload own banner" on storage.objects;
+create policy "Users can upload own banner"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'banners'
+    and name = (auth.uid())::text || '/banner.jpg'
+  );
+
+drop policy if exists "Users can update own banner" on storage.objects;
+create policy "Users can update own banner"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'banners'
+    and (auth.uid())::text = (storage.foldername(name))[1]
+  )
+  with check (
+    bucket_id = 'banners'
+    and name = (auth.uid())::text || '/banner.jpg'
+  );
+
+-- prompt-images --------------------------------------------------------------
+
+-- True while the caller holds fewer prompt images than their prompt count plus
+-- five. Security definer so it can count every file in the folder, not just the
+-- ones the caller's own read policy would show.
+create or replace function public.prompt_image_quota_ok()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    (select count(*)
+       from storage.objects o
+      where o.bucket_id = 'prompt-images'
+        and (storage.foldername(o.name))[1] = (auth.uid())::text)
+    <
+    (select count(*)
+       from public.prompts p
+      where p.user_id = auth.uid()) + 5;
+$$;
+
+revoke all on function public.prompt_image_quota_ok() from public, anon;
+grant execute on function public.prompt_image_quota_ok() to authenticated;
+
+drop policy if exists "Users can upload own prompt images" on storage.objects;
+create policy "Users can upload own prompt images"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'prompt-images'
+    and (storage.foldername(name))[1] = (auth.uid())::text
+    and public.prompt_image_quota_ok()
+  );
+
+-- --------------------------------------------------------------------------
+-- 20260922130000_hide_prompt_text_from_signed_out.sql
+-- --------------------------------------------------------------------------
+
+-- Make the prompt text sign in only (issue #79).
+--
+-- The product rule is that you get a prompt by signing in and copying it. The
+-- app hid the text on screen, but the anon role could read prompts.prompt, so
+-- anyone could pull every prompt from the API, or GraphQL, or simply from the
+-- feed's own requests, without an account.
+--
+-- anon keeps every other column, so signed out visitors can still browse the
+-- feed and open prompt pages. Signed in users keep full read. The app now lists
+-- its columns explicitly and only asks for `prompt` when signed in, see
+-- src/services/supabase/prompts.ts. It has to: once anon lacks a column, a
+-- signed out select('*') on prompts fails outright rather than skipping it.
+--
+-- Same revoke then grant pattern as 20260905000000. A column level revoke does
+-- nothing while a table level grant exists, and revoking the table privilege
+-- also drops the column ones, so the allowed columns are granted back one by
+-- one. pg_graphql follows these privileges, so the GraphQL endpoint stops
+-- exposing the column to anon as well.
+--
+-- A new column on prompts is not readable by anon until it is added here. That
+-- is deliberate: new prompt data stays private unless someone decides otherwise.
+
+revoke select on public.prompts from anon;
+
+grant select (id, user_id, title, image_url, ai_tool, tags, view_count,
+              copy_count, created_at, updated_at)
+  on public.prompts to anon;
+
+-- --------------------------------------------------------------------------
+-- 20260922140000_check_prompt_image_url.sql
+-- --------------------------------------------------------------------------
+
+-- Only accept prompt images from our own storage (issue #135).
+--
+-- The app uploads the image to the prompt-images bucket and saves its public
+-- URL, but the API accepted any URL. Prompt images load for everyone who
+-- scrolls the feed, so pointing one at your own server logged the IP of every
+-- visitor, let you swap the picture later with nothing on our side noticing,
+-- and skipped the type, size and count limits on uploads.
+--
+-- The URL now has to be a file in the uploader's own folder of the
+-- prompt-images bucket, the same shape as the avatar and banner rules in
+-- 20260922120100: https://<project>.supabase.co/storage/v1/object/public/
+-- prompt-images/<user_id>/<file>. Every existing prompt already matches,
+-- checked against production on 2026-09-22.
+--
+-- This is a trigger rather than a check constraint so it applies to the API
+-- roles only. The SQL editor and the service role can already write anything,
+-- so checking them protects nothing, and it lets supabase/seed.sql keep its
+-- placeholder images, which it cannot upload from SQL. The function is security
+-- invoker on purpose: current_user has to be the caller, not the owner.
+
+create or replace function public.check_prompt_image_url()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user not in ('anon', 'authenticated') then
+    return new;
+  end if;
+
+  if new.image_url !~ ('^https://[a-z0-9-]+\.supabase\.co/storage/v1/object/public/prompt-images/'
+                       || new.user_id::text || '/[^/?#]+(\?[^#]*)?$') then
+    raise exception 'Prompt images must be uploaded through the app.'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger check_prompt_image_url_trigger
+  before insert or update of image_url, user_id on public.prompts
+  for each row
+  execute function public.check_prompt_image_url();
+
+-- --------------------------------------------------------------------------
+-- 20260922150000_add_search_and_tag_indexes.sql
+-- --------------------------------------------------------------------------
+
+-- Full-text search and tag indexes for prompts
+--
+-- Adds a generated tsvector column over title and tags with a GIN index,
+-- plus a GIN index on prompts.tags for fast array filtering.
+--
+-- Both database search and tag filtering currently perform sequential full scans.
+-- GIN indexes allow Postgres to use Bitmap Index Scans for text search and tag
+-- containment/overlap queries.
+
+-- ---------------------------------------------------------------------------
+-- Generated tsvector column and GIN index for full-text search
+-- ---------------------------------------------------------------------------
+--
+-- Stored tsvector generated over title and tags using the english config.
+-- Prompt text is left out: signed out users cannot read it, and the column
+-- would expose its words to them.
+-- In Postgres, specifying 'english'::regconfig ensures the expression is
+-- immutable and valid for GENERATED ALWAYS AS (...) STORED.
+--
+-- fts is read-only and maintained automatically by Postgres on inserts and
+-- updates. Users cannot insert into or update this column directly.
+
+create or replace function public.immutable_array_to_string(arr text[], sep text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select array_to_string(arr, sep);
+$$;
+
+alter table public.prompts
+  add column if not exists fts tsvector
+  generated always as (
+    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(public.immutable_array_to_string(tags, ' '), ''))
+  ) stored;
+
+create index if not exists prompts_fts_idx on public.prompts using gin (fts);
+
+grant select (fts) on public.prompts to anon;
+
+-- ---------------------------------------------------------------------------
+-- GIN index on tags array
+-- ---------------------------------------------------------------------------
+--
+-- prompts.tags is text[]. The default GIN operator class (array_ops) supports
+-- containment (@>) and overlap (&&) operators without requiring any extension.
+
+create index if not exists prompts_tags_idx on public.prompts using gin (tags);
+
+-- --------------------------------------------------------------------------
+-- 20260925000000_denormalized_counters_and_triggers.sql
+-- --------------------------------------------------------------------------
+
+-- Denormalized counters and triggers for likes, follows, and ratings.
+--
+-- Replaces client-side reduction / unbounded relational scans with
+-- database-maintained counter columns on prompts and profiles.
+
+-- 1. Add counter columns
+alter table public.prompts add column if not exists like_count integer not null default 0;
+alter table public.prompts add column if not exists rating_count integer not null default 0;
+alter table public.prompts add column if not exists rating_average numeric(3, 2) default null;
+
+alter table public.profiles add column if not exists follower_count integer not null default 0;
+alter table public.profiles add column if not exists following_count integer not null default 0;
+
+-- Allow anon to read the new denormalized counter columns on prompts
+grant select (like_count, rating_count, rating_average) on public.prompts to anon;
+
+-- 2. Keep prompt like_count synchronized with public.likes
+create or replace function public.handle_like_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.prompts
+    set like_count = like_count + 1
+    where id = NEW.prompt_id;
+    return NEW;
+  elsif (tg_op = 'DELETE') then
+    update public.prompts
+    set like_count = greatest(like_count - 1, 0)
+    where id = OLD.prompt_id;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists on_like_count_change on public.likes;
+create trigger on_like_count_change
+  after insert or delete on public.likes
+  for each row execute function public.handle_like_count();
+
+-- 3. Keep profile follower_count and following_count synchronized with public.follows
+create or replace function public.handle_follow_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.profiles
+    set follower_count = follower_count + 1
+    where id = NEW.following_id;
+
+    update public.profiles
+    set following_count = following_count + 1
+    where id = NEW.follower_id;
+    return NEW;
+  elsif (tg_op = 'DELETE') then
+    update public.profiles
+    set follower_count = greatest(follower_count - 1, 0)
+    where id = OLD.following_id;
+
+    update public.profiles
+    set following_count = greatest(following_count - 1, 0)
+    where id = OLD.follower_id;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists on_follow_count_change on public.follows;
+create trigger on_follow_count_change
+  after insert or delete on public.follows
+  for each row execute function public.handle_follow_count();
+
+-- 4. Keep prompt rating_count and rating_average synchronized with public.prompt_ratings
+create or replace function public.handle_prompt_rating()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.prompts
+    set
+      rating_count = rating_count + 1,
+      rating_average = (select round(avg(rating)::numeric, 2) from public.prompt_ratings where prompt_id = NEW.prompt_id)
+    where id = NEW.prompt_id;
+    return NEW;
+  elsif (tg_op = 'UPDATE') then
+    update public.prompts
+    set
+      rating_average = (select round(avg(rating)::numeric, 2) from public.prompt_ratings where prompt_id = NEW.prompt_id)
+    where id = NEW.prompt_id;
+    return NEW;
+  elsif (tg_op = 'DELETE') then
+    update public.prompts
+    set
+      rating_count = greatest(rating_count - 1, 0),
+      rating_average = (select round(avg(rating)::numeric, 2) from public.prompt_ratings where prompt_id = OLD.prompt_id)
+    where id = OLD.prompt_id;
+    return OLD;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists on_prompt_rating_change on public.prompt_ratings;
+create trigger on_prompt_rating_change
+  after insert or update or delete on public.prompt_ratings
+  for each row execute function public.handle_prompt_rating();
+
+-- 5. Backfill existing counts from existing data
+update public.prompts p
+set like_count = coalesce((select count(*) from public.likes l where l.prompt_id = p.id), 0),
+    rating_count = coalesce((select count(*) from public.prompt_ratings pr where pr.prompt_id = p.id), 0),
+    rating_average = (select round(avg(rating)::numeric, 2) from public.prompt_ratings pr where pr.prompt_id = p.id);
+
+update public.profiles pr
+set follower_count = coalesce((select count(*) from public.follows f where f.following_id = pr.id), 0),
+    following_count = coalesce((select count(*) from public.follows f where f.follower_id = pr.id), 0);
+
+-- --------------------------------------------------------------------------
 -- After running this
 -- --------------------------------------------------------------------------
 --

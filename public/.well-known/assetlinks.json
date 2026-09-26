@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.parostudios.app",
+      "sha256_cert_fingerprints": [
+        "0F:FE:9C:61:7B:C4:B6:1D:29:2C:F9:FE:5B:50:56:FF:83:79:FC:2B:56:A8:E6:98:2F:20:51:EF:5C:4C:67:AE"
+      ]
+    }
+  }
+]

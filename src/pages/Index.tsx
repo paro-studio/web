@@ -1,3 +1,4 @@
+import { QueryError } from "@/components/QueryError";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Sparkles, Plus } from "lucide-react";
@@ -15,18 +16,25 @@ import { FeedItem, toImageFeedItem, injectAdvertisements } from "@/lib/feedTypes
 import { AuthModal } from "@/components/auth/AuthModal";
 
 type SortOption = "trending" | "newest" | "most_copied";
+const SORT_OPTIONS: SortOption[] = ["trending", "newest", "most_copied"];
 
 export default function Index() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [searchQuery, setSearchQuery] = useState("");
+  // Search and sort live in the URL alongside tags. As component state they
+  // reset whenever the feed remounted, so opening a prompt and going back
+  // put a Newest or searched feed back to Trending, and the restored scroll
+  // position pointed at different prompts.
+  const searchQuery = searchParams.get("q") ?? "";
+  const sortParam = searchParams.get("sort");
+  const sortBy: SortOption = SORT_OPTIONS.includes(sortParam as SortOption)
+    ? (sortParam as SortOption)
+    : "trending";
   const selectedTags = useMemo(
     () => [...new Set(searchParams.getAll("tag"))],
     [searchParams]
   );
-  const [sortBy, setSortBy] = useState<SortOption>("trending");
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -48,7 +56,7 @@ export default function Index() {
     navigate(pending, { replace: true });
   }, [authLoading, user, navigate]);
 
-  const { data: prompts, isLoading: promptsLoading } = usePrompts({
+  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch } = usePrompts({
     selectedTags,
     searchQuery,
     sortBy,
@@ -56,49 +64,8 @@ export default function Index() {
 
   // Always use fixed predefined tags - never changes based on user uploads
   const displayTags = [...STANDARD_TAGS];
-  // Mobile tags - exclude solo, landscape, fashion, product shot (fits in 2 rows)
-  const mobileExcludedTags = ["solo", "landscape", "fashion", "product shot"];
-  const mobileTags = displayTags.filter(tag => !mobileExcludedTags.includes(tag));
 
-  // Filter prompts by search and tags
-  const filteredPrompts = useMemo(() => {
-    let result = prompts ?? [];
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.title.toLowerCase().includes(query) ||
-          p.promptText.toLowerCase().includes(query) ||  // camelCase
-          p.tags.some((tag) => tag.toLowerCase().includes(query))
-      );
-    }
-
-    if (selectedTags.length > 0) {
-      result = result.filter((p) =>
-        selectedTags.some((tag) => p.tags.includes(tag))
-      );
-    }
-
-    // Sort
-    switch (sortBy) {
-      case "newest":
-        result = [...result].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  // camelCase
-        );
-        break;
-      case "most_copied":
-        result = [...result].sort((a, b) => b.copyCount - a.copyCount);  // camelCase
-        break;
-      case "trending":
-      default:
-        result = [...result].sort(
-          (a, b) => b.viewCount + b.copyCount * 3 + b.likeCount * 2 - (a.viewCount + a.copyCount * 3 + a.likeCount * 2)  // camelCase
-        );
-    }
-
-    return result;
-  }, [prompts, searchQuery, selectedTags, sortBy]);
+  const displayPrompts = useMemo(() => prompts ?? [], [prompts]);
 
   const handleTagToggle = (tag: string) => {
     const nextTags = selectedTags.includes(tag)
@@ -121,16 +88,31 @@ export default function Index() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  // Convert filtered prompts to FeedItem format and prepare for future ad injection
+  const setSearchQuery = (query: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (query) nextParams.set("q", query);
+    else nextParams.delete("q");
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const setSortBy = (sort: SortOption) => {
+    const nextParams = new URLSearchParams(searchParams);
+    // Trending is the default, so it keeps the URL clean.
+    if (sort === "trending") nextParams.delete("sort");
+    else nextParams.set("sort", sort);
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  // Convert prompts to FeedItem format and prepare for future ad injection
   const feedItems: FeedItem[] = useMemo(() => {
-    const imageItems = filteredPrompts.map(toImageFeedItem);
+    const imageItems = displayPrompts.map(toImageFeedItem);
 
     // Ad injection ready - currently disabled (no ad provider)
     // When ads are ready, pass an ad generator function:
     // return injectAdvertisements(imageItems, 8, (index) => ({ type: "advertisement", data: { id: `ad-${index}` } }));
 
     return injectAdvertisements(imageItems, 8);
-  }, [filteredPrompts]);
+  }, [displayPrompts]);
 
   // Render feed items using FeedCard
   const renderFeed = () => {
@@ -139,7 +121,6 @@ export default function Index() {
         key={item.type === "image" ? item.data.id : item.data.id}
         item={item}
         onLoginRequired={() => setAuthModalOpen(true)}
-        onDelete={() => setRefreshKey(prev => prev + 1)}
         // Enough to cover the first row on desktop and the first screen on
         // mobile. One of these is the largest contentful paint, and lazy
         // loading it was costing seconds. Everything below still lazy loads.
@@ -161,16 +142,16 @@ export default function Index() {
       <main className="flex-1 pt-14 sm:pt-16 lg:pt-20">
         {/* Mobile: PARO Originals (replaces Browse by tags) */}
         <section className="md:hidden px-4 py-4 sm:py-6">
-          <a
-            href="/originals"
-            className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
+          <Link
+            to="/originals"
+            className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
           >
             <div className="flex items-center gap-2 sm:gap-3">
               <Sparkles className="h-4 sm:h-5 w-4 sm:w-5 text-[hsl(var(--gold))]" />
               <span className="font-serif text-base sm:text-lg">PARO Originals</span>
             </div>
             <span className="text-xs sm:text-sm text-muted-foreground">Coming Soon</span>
-          </a>
+          </Link>
         </section>
 
         {/* Tablet & Desktop: Tag Filter Section */}
@@ -213,17 +194,18 @@ export default function Index() {
               {sortBy === "most_copied" && "Most Copied Prompts"}
             </h2>
 
+            {isError && <QueryError resource="prompts" onRetry={() => { void refetch(); }} retrying={isFetching} />}
             {promptsLoading ? (
               <div className="masonry-grid">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="masonry-item">
-                    <Skeleton className="aspect-[3/4] rounded-sm" />
+                    <Skeleton className="aspect-[3/4] rounded-xl" />
                     <Skeleton className="h-5 sm:h-6 mt-2 sm:mt-3 w-3/4" />
                     <Skeleton className="h-3 sm:h-4 mt-1.5 sm:mt-2 w-1/2" />
                   </div>
                 ))}
               </div>
-            ) : filteredPrompts.length === 0 ? (
+            ) : isError && !prompts ? null : displayPrompts.length === 0 ? (
               searchQuery.trim() || selectedTags.length > 0 ? (
                 <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
                   <p className="font-serif text-lg sm:text-xl text-muted-foreground">
@@ -236,8 +218,12 @@ export default function Index() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setSearchQuery("");
-                      handleClearTags();
+                      // One update: two back to back would each start from
+                      // the same old params, and the second would undo the first.
+                      const nextParams = new URLSearchParams(searchParams);
+                      nextParams.delete("q");
+                      nextParams.delete("tag");
+                      setSearchParams(nextParams, { replace: true });
                     }}
                     className="mt-4"
                   >
