@@ -396,7 +396,7 @@ export default function UploadPrompt() {
                         <strong className="text-foreground">{limitStatus.remaining} of {limitStatus.limit}</strong> daily uploads remaining today
                       </span>
                     </div>
-                    <span className="text-[11px] sm:text-xs text-muted-foreground/80">Resets at 12:00 AM UTC</span>
+                    <span className="text-xs text-muted-foreground/80">Resets at 12:00 AM UTC</span>
                   </div>
                 )}
               </div>

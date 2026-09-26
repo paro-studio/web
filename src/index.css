@@ -122,8 +122,8 @@
     --success: 142 65% 34%;
     --success-foreground: 40 33% 98%;
 
-    --border: 220 12% 16%;
-    --input: 220 12% 16%;
+    --border: 220 12% 40%;
+    --input: 220 12% 40%;
     --ring: 38 50% 55%;
 
     --sidebar-background: 220 15% 8%;
@@ -132,8 +132,19 @@
     --sidebar-primary-foreground: 220 15% 6%;
     --sidebar-accent: 220 12% 14%;
     --sidebar-accent-foreground: 38 45% 85%;
-    --sidebar-border: 220 12% 16%;
+    --sidebar-border: 220 12% 40%;
     --sidebar-ring: 38 50% 55%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   * {
