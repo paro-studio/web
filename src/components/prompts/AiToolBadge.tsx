@@ -62,7 +62,7 @@ export function AiToolBadge({ tool, className }: AiToolBadgeProps) {
         setShowFull((prev) => !prev);
       }}
       className={cn(
-        "flex items-center gap-1 min-w-0 text-left cursor-pointer hover:text-foreground transition-colors",
+        "flex items-center gap-1 min-w-0 text-left cursor-pointer hover:text-foreground transition-colors touch-target",
         className
       )}
       title={tool}

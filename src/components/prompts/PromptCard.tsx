@@ -184,15 +184,15 @@ export function PromptCard({
     saveMutation.toggle(localSaved);
   };
 
-  const handleCopyLink = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleCopyLink = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     await copyPromptLink(id);
   };
 
-  const handleShare = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleShare = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setShareOpen(true);
   };
 
@@ -569,33 +569,32 @@ export function PromptCard({
             </DropdownMenuTrigger>
             
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleCopy}>
+              <DropdownMenuItem onClick={() => void handleCopy()}>
                 {copied ? <Check className="h-4 w-4 mr-2 text-gold" /> : <Copy className="h-4 w-4 mr-2" />}
                 {copied ? "Copied Prompt" : "Copy Prompt"}
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleLike}>
+              <DropdownMenuItem onClick={() => void handleLike()}>
                 <Heart className={cn("h-4 w-4 mr-2", localLiked && "fill-destructive text-destructive")} />
                 {localLiked ? "Unlike" : "Like"}
               </DropdownMenuItem>
 
               <DropdownMenuItem
                 onClick={(e) => {
-                  e.preventDefault();
                   e.stopPropagation();
-                  handleSave(e);
+                  void handleSave();
                 }}
               >
                 <Bookmark className={cn("h-4 w-4 mr-2", localSaved && "fill-gold text-gold")} />
                 {localSaved ? "Unsave" : "Save"}
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleShare}>
+              <DropdownMenuItem onClick={() => handleShare()}>
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleCopyLink}>
+              <DropdownMenuItem onClick={() => void handleCopyLink()}>
                 <LinkIcon className="h-4 w-4 mr-2" />
                 Copy Link
               </DropdownMenuItem>
@@ -603,7 +602,6 @@ export function PromptCard({
               {showEditButton && onEditClick && (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     onEditClick();
                   }}
@@ -625,7 +623,6 @@ export function PromptCard({
               {isOwner ? (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     setShowDeleteDialog(true);
                   }}
@@ -637,10 +634,9 @@ export function PromptCard({
               ) : (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     if (!user) {
-                      onLoginRequired?.();
+                      askToSignIn("report prompts");
                       return;
                     }
                     setReportOpen(true);
