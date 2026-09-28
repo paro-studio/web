@@ -71,6 +71,46 @@ describe("PromptCard", () => {
     expect(ratingElement).toHaveTextContent("Not rated");
   });
 
+  it("renders mobile drawer with complete actions including Copy Prompt and Like", () => {
+    renderPromptCard(baseProps);
+
+    const [mobileTrigger] = screen.getAllByLabelText("More options");
+    fireEvent.click(mobileTrigger);
+
+    // Mobile drawer contains all primary actions
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Like" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Link" })).toBeInTheDocument();
+    expect(screen.getByText("View Profile")).toBeInTheDocument();
+    expect(screen.getByText("AI Tool:")).toBeInTheDocument();
+    expect(screen.getAllByText("Midjourney").length).toBeGreaterThan(0);
+  });
+
+  it("renders desktop dropdown with complete actions including Copy Prompt and Like", () => {
+    renderPromptCard(baseProps);
+
+    const [, desktopTrigger] = screen.getAllByLabelText("More options");
+    fireEvent.pointerDown(desktopTrigger, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(desktopTrigger, { key: "ArrowDown" });
+
+    expect(screen.getByText("Copy Prompt")).toBeInTheDocument();
+    expect(screen.getByText("Like")).toBeInTheDocument();
+    expect(screen.getByText("Save")).toBeInTheDocument();
+    expect(screen.getByText("Share")).toBeInTheDocument();
+    expect(screen.getByText("Copy Link")).toBeInTheDocument();
+    expect(screen.getByText("View Profile")).toBeInTheDocument();
+    expect(screen.getByText("Tool:")).toBeInTheDocument();
+  });
+
+  it("includes touch hover-none override on copy button for touch screens like iPad Pro (#45)", () => {
+    renderPromptCard(baseProps);
+
+    const copyButton = screen.getByLabelText("Copy prompt");
+    expect(copyButton.className).toContain("[@media(hover:none)]:!opacity-100");
+  });
+
   it("applies snappy transition tokens to card and image", () => {
     renderPromptCard(baseProps);
 
