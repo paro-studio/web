@@ -29,23 +29,25 @@ export async function isLiked(userId: string, promptId: string): Promise<boolean
  * Get like count for a prompt
  */
 export async function getLikeCount(promptId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('likes')
-    .select('*', { count: 'exact', head: true })
-    .eq('prompt_id', promptId);
+  const { data, error } = await supabase
+    .from('prompts')
+    .select('like_count')
+    .eq('id', promptId)
+    .maybeSingle();
 
   if (error) {
     console.error('Error getting like count:', error);
     return 0;
   }
 
-  return count || 0;
+  return data?.like_count ?? 0;
 }
 
 /**
  * Like counts for many prompts in one query.
  *
- * `likes` is publicly readable, so this works for signed-out visitors too.
+ * Reads denormalized `like_count` directly from `prompts`, transferring only
+ * one row per requested prompt ID regardless of total like volume.
  * Prompts with no likes are simply absent from the map — read with `?? 0`.
  */
 export async function getLikeCounts(promptIds: string[]): Promise<Map<string, number>> {
@@ -53,9 +55,9 @@ export async function getLikeCounts(promptIds: string[]): Promise<Map<string, nu
   if (unique.length === 0) return new Map();
 
   const { data, error } = await supabase
-    .from('likes')
-    .select('prompt_id')
-    .in('prompt_id', unique);
+    .from('prompts')
+    .select('id, like_count')
+    .in('id', unique);
 
   if (error) {
     console.error('Error getting like counts:', error);
@@ -63,8 +65,8 @@ export async function getLikeCounts(promptIds: string[]): Promise<Map<string, nu
   }
 
   const counts = new Map<string, number>();
-  for (const { prompt_id } of data ?? []) {
-    counts.set(prompt_id, (counts.get(prompt_id) ?? 0) + 1);
+  for (const { id, like_count } of data ?? []) {
+    counts.set(id, like_count ?? 0);
   }
   return counts;
 }
@@ -90,33 +92,20 @@ export async function getLikedPromptIds(userId: string, promptIds: string[]): Pr
   return new Set((data ?? []).map((row) => row.prompt_id));
 }
 
-/**
- * Toggle like status (insert if not exists, delete if exists)
- */
-export async function toggleLike(userId: string, promptId: string): Promise<{ error: PostgrestError | null }> {
-  // Check if already liked
-  const { data: existing } = await supabase
-    .from('likes')
-    .select('id')
-    .match({ user_id: userId, prompt_id: promptId })
-    .maybeSingle();
-
-  if (existing) {
-    // Unlike
+/** Set the requested like state without depending on a possibly stale read. */
+export async function setLike(userId: string, promptId: string, active: boolean): Promise<{ error: PostgrestError | null }> {
+  if (!active) {
     const { error } = await supabase
       .from('likes')
       .delete()
       .match({ user_id: userId, prompt_id: promptId });
-    
-    return { error };
-  } else {
-    // Like
-    const { error } = await supabase
-      .from('likes')
-      .insert({ user_id: userId, prompt_id: promptId });
-    
     return { error };
   }
+
+  const { error } = await supabase
+    .from('likes')
+    .upsert({ user_id: userId, prompt_id: promptId }, { onConflict: 'user_id,prompt_id', ignoreDuplicates: true });
+  return { error };
 }
 
 /**
@@ -134,7 +123,6 @@ export async function getUserLikes(
         id,
         user_id,
         title,
-        prompt,
         image_url,
         ai_tool,
         tags,
@@ -159,7 +147,6 @@ export async function getUserLikes(
         id: p.id,
         userId: p.user_id,
         title: p.title,
-        promptText: p.prompt,
         imageUrl: p.image_url,
         toolUsed: p.ai_tool,
         tags: p.tags || [],

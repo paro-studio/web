@@ -1,3 +1,5 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { QueryError } from "@/components/QueryError";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Heart } from "lucide-react";
@@ -6,37 +8,42 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PromptCard } from "@/components/prompts/PromptCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getLikeCounts, getUserLikes } from "@/services/supabase/likes";
+import { getProfilesByIds } from "@/services/supabase/profiles";
+import { getSavedPromptIds } from "@/services/supabase/saves";
+import { getPromptRatings } from "@/services/supabase/ratings";
 
 export default function Liked() {
   const { user, session, profile, loading } = useAuth();
 
   // Fetch liked prompts from Supabase
-  const { data: likedPrompts, isLoading, refetch } = useQuery({
+  const { data: likedPrompts, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["liked-prompts", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
 
       // Get liked prompts from Supabase
-      const { getUserLikes } = await import('@/services/supabase/likes');
-      const { getProfile } = await import('@/services/supabase/profiles');
-      const { isSaved } = await import('@/services/supabase/saves');
-
       const { prompts, error } = await getUserLikes(user.id);
       
-      if (error) {
-        console.error('Error fetching liked prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
-      // Enrich with creator and save status
-      const enriched = await Promise.all(prompts.map(async (p) => {
-        const creator = await getProfile(p.userId);
-        const saved = await isSaved(user.id, p.id);
+      // Enrich the whole page with bulk lookups rather than per-card requests.
+      const promptIds = prompts.map((p) => p.id);
+      const [creators, savedIds, likeCounts, ratings] = await Promise.all([
+        getProfilesByIds(prompts.map((p) => p.userId)),
+        getSavedPromptIds(user.id, promptIds),
+        getLikeCounts(promptIds),
+        getPromptRatings(promptIds),
+      ]);
+
+      const enriched = prompts.map((p) => {
+        const creator = creators.get(p.userId) ?? null;
+        const saved = savedIds.has(p.id);
+        const rating = ratings.get(p.id);
 
         return {
           id: p.id,
           title: p.title,
-          promptText: p.promptText,
           imageUrl: p.imageUrl,
           toolUsed: p.toolUsed,
           viewCount: p.viewCount || 0,
@@ -56,11 +63,13 @@ export default function Liked() {
             avatarUrl: null,
             verified: false
           },
-          likeCount: 0, // Will be fetched by PromptCard if needed
+          likeCount: likeCounts.get(p.id) ?? 0,
           isLiked: true, // Always true on this page
-          isSaved: saved
+          isSaved: saved,
+          accuracyRating: rating?.average ?? null,
+          ratingCount: rating?.count ?? 0
         };
-      }));
+      });
 
       return enriched;
     },
@@ -73,7 +82,7 @@ export default function Liked() {
       <div className="min-h-screen bg-background">
         <Navbar />
         <main className="pt-20 lg:pt-24 container mx-auto px-4 lg:px-8 text-center py-16">
-          <p className="text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );
@@ -104,11 +113,12 @@ export default function Liked() {
             <h1 className="font-serif text-3xl">Liked Prompts</h1>
           </div>
 
-          {isLoading ? (
+          {isError && <QueryError resource="liked prompts" onRetry={() => { void refetch(); }} retrying={isFetching} />}
+          {isError && !likedPrompts ? null : isLoading ? (
             <div className="masonry-grid">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="masonry-item">
-                  <Skeleton className="aspect-[3/4] rounded-sm" />
+                  <Skeleton className="aspect-[3/4] rounded-xl" />
                 </div>
               ))}
             </div>
@@ -126,12 +136,13 @@ export default function Liked() {
                   key={prompt.id}
                   id={prompt.id}
                   title={prompt.title}
-                  promptText={prompt.promptText}
                   imageUrl={prompt.imageUrl}
                   toolUsed={prompt.toolUsed}
                   viewCount={prompt.viewCount}
                   copyCount={prompt.copyCount}
                   likeCount={prompt.likeCount}
+                  accuracyRating={prompt.accuracyRating}
+                  ratingCount={prompt.ratingCount}
                   creator={prompt.creator}
                   tags={prompt.tags}
                   isLiked={prompt.isLiked}

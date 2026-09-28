@@ -76,7 +76,9 @@ export function AiToolBadge({ tool, className }: AiToolBadgeProps) {
       ) : (
         Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />
       )}
-      <span className="truncate">{displayText}</span>
+      <span className={showFull ? "whitespace-normal break-words" : "truncate"}>
+        {displayText}
+      </span>
     </button>
   );
 }

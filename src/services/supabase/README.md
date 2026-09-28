@@ -25,9 +25,14 @@ import { supabase } from '@/services/supabase';
 // Example: Query data
 const { data, error } = await supabase
   .from('prompts')
-  .select('*')
+  .select('id, title, image_url')
   .limit(10);
 ```
+
+Do not `select('*')` on `prompts`, and do not add `prompt` to list or detail
+queries. The prompt text is only loaded by `getPromptText` in `prompts.ts`, when
+a signed in user taps Copy or edits their own prompt. The database refuses
+`prompts.prompt` to signed out users, so a `*` query fails outright for them.
 
 ## File Structure
 

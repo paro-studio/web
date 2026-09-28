@@ -167,7 +167,7 @@ export function SharePromptDialog({
         <img
           src={imageUrl}
           alt=""
-          className="h-14 w-14 rounded-sm object-cover flex-shrink-0"
+          className="h-14 w-14 rounded-xl object-cover flex-shrink-0"
           loading="lazy"
         />
         <div className="min-w-0">

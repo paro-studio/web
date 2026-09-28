@@ -164,7 +164,7 @@ export default function CompleteProfile() {
       <div className="flex-1 flex items-center justify-center px-4 pt-20 pb-8">
         <div className="w-full max-w-md">
           {/* Card container - matching AuthModal style */}
-          <div className="bg-card border border-border/50 rounded-lg p-6 sm:p-8 shadow-lg space-y-6">
+          <div className="bg-card border border-border/50 rounded-xl p-6 sm:p-8 shadow-lg space-y-6">
             {/* Header with avatar */}
             <div className="text-center space-y-4">
               {avatarUrl && (
@@ -195,6 +195,7 @@ export default function CompleteProfile() {
                 <Input
                   id="username"
                   placeholder="your_username"
+                  maxLength={30}
                   value={username}
                   onChange={(e) => {
                     const value = e.target.value.toLowerCase();
@@ -215,7 +216,7 @@ export default function CompleteProfile() {
                   <p className="text-sm text-destructive">{usernameError}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Lowercase letters, numbers, and underscores only. Min 3 characters.
+                  Lowercase letters, numbers, and underscores only. 3 to 30 characters.
                 </p>
               </div>
 

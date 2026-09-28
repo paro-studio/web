@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { STANDARD_TAGS } from "@/lib/standardTags";
 import { getErrorMessage } from "@/lib/errors";
+import { getPromptText } from "@/services/supabase/prompts";
 
 interface EditPromptModalProps {
   isOpen: boolean;
@@ -29,7 +30,8 @@ interface EditPromptModalProps {
   prompt: {
     id: string;
     title: string;
-    prompt_text: string;
+    /** Loaded when the modal opens if left out, since lists never carry it. */
+    prompt_text?: string;
     image_url: string;
     tool_used: string;
     tags: string[];
@@ -45,7 +47,8 @@ export function EditPromptModal({
   onUpdated,
 }: EditPromptModalProps) {
   const [title, setTitle] = useState(prompt.title);
-  const [promptText, setPromptText] = useState(prompt.prompt_text);
+  const [promptText, setPromptText] = useState(prompt.prompt_text ?? "");
+  const [textLoading, setTextLoading] = useState(prompt.prompt_text === undefined);
   const [toolUsed, setToolUsed] = useState(prompt.tool_used);
   const [customTool, setCustomTool] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>(prompt.tags);
@@ -53,6 +56,29 @@ export function EditPromptModal({
   const [imagePreview, setImagePreview] = useState(prompt.image_url);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+
+  // Lists never load the prompt text, so fetch it for the owner to edit. Save
+  // stays disabled until it arrives, so a slow load cannot wipe the prompt.
+  useEffect(() => {
+    if (prompt.prompt_text !== undefined) return;
+    let cancelled = false;
+    setTextLoading(true);
+    getPromptText(prompt.id).then(({ text, error }) => {
+      if (cancelled) return;
+      if (error || text === null) {
+        toast({
+          title: "Couldn't load the prompt",
+          description: "Please close this and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setPromptText(text);
+      setTextLoading(false);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt.id, prompt.prompt_text]);
 
   // Determine if current tool is a custom "Other" tool
   useEffect(() => {
@@ -152,6 +178,20 @@ export function EditPromptModal({
         throw new Error(error || "Failed to update prompt");
       }
 
+      // The row now points at the replacement. Cleanup must not turn a
+      // successful edit into an error or remove an image still in use.
+      if (imageFile && prompt.image_url && finalImageUrl !== prompt.image_url) {
+        try {
+          const { deletePromptImage } = await import('@/services/supabase/storage');
+          const { error: cleanupError } = await deletePromptImage(prompt.image_url);
+          if (cleanupError) {
+            console.error('Prompt updated but image cleanup failed:', cleanupError);
+          }
+        } catch (cleanupError) {
+          console.error('Prompt updated but image cleanup failed:', cleanupError);
+        }
+      }
+
       toast({ title: "Prompt updated successfully" });
       onUpdated();
       onClose();
@@ -181,7 +221,7 @@ export function EditPromptModal({
               <img
                 src={imagePreview}
                 alt="Preview"
-                className="w-full max-h-64 object-contain rounded-sm bg-secondary"
+                className="w-full max-h-64 object-contain rounded-xl bg-secondary"
               />
               <label className="absolute bottom-3 right-3 p-2 rounded-full bg-background/90 backdrop-blur-sm cursor-pointer hover:bg-background transition-colors">
                 <Upload className="h-4 w-4" />
@@ -214,7 +254,8 @@ export function EditPromptModal({
               id="edit-prompt"
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
-              placeholder="Enter your prompt"
+              placeholder={textLoading ? "Loading..." : "Enter your prompt"}
+              disabled={textLoading}
               rows={4}
               className="mt-1"
             />
@@ -289,7 +330,7 @@ export function EditPromptModal({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || selectedTags.length < 3 || (toolUsed === "Other" && !customTool.trim())}
+              disabled={isSubmitting || textLoading || selectedTags.length < 3 || (toolUsed === "Other" && !customTool.trim())}
               className="flex-1"
             >
               {isSubmitting ? "Saving..." : "Save Changes"}

@@ -87,6 +87,10 @@ export default {
           DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
           foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
         },
+        success: {
+          DEFAULT: "hsl(var(--success) / <alpha-value>)",
+          foreground: "hsl(var(--success-foreground) / <alpha-value>)",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted) / <alpha-value>)",
           foreground: "hsl(var(--muted-foreground) / <alpha-value>)",
@@ -125,8 +129,8 @@ export default {
         elevated: "var(--shadow-elevated)",
       },
       transitionDuration: {
-        slow: "500ms",
-        medium: "350ms",
+        slow: "250ms",
+        medium: "200ms",
       },
       keyframes: {
         "accordion-down": {

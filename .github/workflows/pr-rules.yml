@@ -1,0 +1,92 @@
+name: PR rules
+
+# Posts a friendly reminder when a pull request breaks the rules in
+# CONTRIBUTING.md under "Picking up an issue". It never closes anything, that
+# stays a maintainer decision.
+#
+# pull_request_target is needed so this can comment on PRs from forks. That
+# trigger runs with a write token against the base repo, so this workflow must
+# NEVER check out or run code from the pull request. It only reads metadata
+# through the API. Do not add actions/checkout here.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  issues: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Maintainers and bots are exempt.
+    if: >-
+      !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+      && github.event.pull_request.user.type != 'Bot'
+    steps:
+      # Pinned to a SHA because this workflow runs with a write token.
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const MAX_OPEN = 2;
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const problems = [];
+
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const mine = open.filter(p => p.user.login === author);
+            if (mine.length > MAX_OPEN) {
+              const list = mine.map(p => `#${p.number}`).join(', ');
+              problems.push(
+                `You have ${mine.length} open pull requests (${list}). The limit is ${MAX_OPEN}, ` +
+                `so this one will wait until one of the others is merged or closed.`
+              );
+            }
+
+            // Only checked when the PR links an issue. Small fixes without an
+            // issue are allowed by CONTRIBUTING.md.
+            const linked = [...(pr.body || '').matchAll(/\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s+#(\d+)/gi)]
+              .map(m => Number(m[1]));
+            for (const number of new Set(linked)) {
+              let issue;
+              try {
+                ({ data: issue } = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                }));
+              } catch {
+                continue;
+              }
+              if (issue.pull_request) continue;
+              const assignees = issue.assignees.map(a => a.login);
+              if (!assignees.includes(author)) {
+                problems.push(
+                  `#${number} is not assigned to you. Please comment on the issue with your plan ` +
+                  `and wait to be assigned before starting.`
+                );
+              }
+            }
+
+            if (problems.length === 0) return;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: [
+                `Thanks for the pull request, @${author}. A couple of things from ` +
+                `[CONTRIBUTING.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CONTRIBUTING.md#picking-up-an-issue) ` +
+                `before this can be reviewed:`,
+                '',
+                ...problems.map(p => `- ${p}`),
+                '',
+                'Review is done by one person in their spare time, so these rules keep the queue moving for everyone.',
+              ].join('\n'),
+            });

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/services/supabase/client';
 import * as supabaseAuth from '@/services/supabase/auth';
@@ -26,9 +27,10 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  /** True only while the stored session is being restored. Unlike `loading`,
+   *  it does not wait for the profile, so public data can start sooner. */
+  sessionLoading: boolean;
   needsProfileCompletion: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -37,6 +39,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -58,16 +61,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      // First, ensure profile exists in database (creates if doesn't exist)
-      const currentUser = await supabaseAuth.getCurrentUser();
-      
+      // First, ensure profile exists in database (creates if doesn't exist).
+      // The stored session is enough to start: ensureProfile verifies the user
+      // with the auth server itself, so calling getUser() here as well paid
+      // that round trip twice, in a row, on every app open.
+      const { data: { session: storedSession } } = await supabase.auth.getSession();
+      const currentUser = storedSession?.user?.id === userId ? storedSession.user : null;
+
       if (currentUser) {
         const { profile: supabaseProfile, error } = await supabaseAuth.ensureProfile(currentUser);
-        
 
         if (error) {
+          // Fall through to the direct read below instead of giving up.
           console.error("❌ fetchProfile: Error ensuring profile:", error);
-          return null;
         }
 
         if (supabaseProfile) {
@@ -79,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             avatar_url: supabaseProfile.avatar_url,
             cover_url: supabaseProfile.cover_url,
             bio: supabaseProfile.bio,
+            verified: supabaseProfile.verified ?? false,
           };
           return userProfile;
         }
@@ -94,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           avatar_url: supabaseProfile.avatar_url,
           cover_url: supabaseProfile.cover_url,
           bio: supabaseProfile.bio,
+          verified: supabaseProfile.verified ?? false,
         };
       }
 
@@ -132,6 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // bounces them off whatever protected route they were on. getSession()
       // below is the authoritative read of the starting state.
       if (event === 'INITIAL_SESSION') return;
+
+      // Cached queries hold the previous user's likes, saves and private lists,
+      // and stay around for gcTime. Without this, the next person on a shared
+      // device sees them. SIGNED_OUT also fires for another tab signing out and
+      // for a session that expires, not just the Sign out button. clear() is
+      // synchronous and never touches supabase, so it is safe inside this lock.
+      if (event === 'SIGNED_OUT') queryClient.clear();
 
       setSession(nextSession);
       setUser(
@@ -173,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [queryClient]);
 
   // Load the profile whenever the signed-in user changes. Runs outside the
   // auth callback, so it is safe to call Supabase here.
@@ -231,24 +246,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string) => {
-    // For now, redirect to Google OAuth
-    toast({
-      title: "Please use Google Sign In",
-      description: "Email/password signup coming soon!",
-    });
-    return { error: new Error("Not implemented") };
-  };
-
-  const signIn = async (email: string, password: string) => {
-    // For now, redirect to Google OAuth
-    toast({
-      title: "Please use Google Sign In",
-      description: "Email/password login coming soon!",
-    });
-    return { error: new Error("Not implemented") };
-  };
-
   const signOut = async () => {
     // Always clear local state, even if Supabase signOut fails
     // This prevents the UI from getting stuck in a logged-in state
@@ -259,7 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Continue anyway - we still want to clear local state
     }
     
-    // Clear state regardless of API result
+    // Clear state regardless of API result. The cache is cleared here too
+    // because a failed server sign out may never emit SIGNED_OUT.
+    queryClient.clear();
     setUser(null);
     setSession(null);
     setProfile(null);
@@ -277,13 +276,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         loading,
+        sessionLoading: authLoading,
         // The `!loading` guard is load-bearing: without it there is a window
         // during startup where the user is set but the profile has not arrived
         // yet, and ProtectedRoute bounces a perfectly valid account to
         // /complete-profile.
         needsProfileCompletion: !!user && !loading && (!profile || !profile.username),
-        signUp,
-        signIn,
         signInWithGoogle,
         signOut,
         refreshProfile,

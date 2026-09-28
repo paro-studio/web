@@ -8,7 +8,6 @@ export interface ImageFeedItem {
   data: {
     id: string;
     title: string;
-    prompt_text: string;
     image_url: string;
     tool_used: string;
     view_count: number;
@@ -83,7 +82,6 @@ export function injectAdvertisements(
 export function toImageFeedItem(prompt: {
   id: string;
   title: string;
-  promptText: string;  // camelCase from usePrompts
   imageUrl: string;    // camelCase from usePrompts
   toolUsed: string;    // camelCase from usePrompts
   viewCount: number;
@@ -108,7 +106,6 @@ export function toImageFeedItem(prompt: {
     data: {
       id: prompt.id,
       title: prompt.title,
-      prompt_text: prompt.promptText,          // Transform to snake_case
       image_url: prompt.imageUrl,              // Transform to snake_case
       tool_used: prompt.toolUsed,              // Transform to snake_case
       view_count: prompt.viewCount,

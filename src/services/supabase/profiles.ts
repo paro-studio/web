@@ -15,6 +15,8 @@ export interface Profile {
   cover_url: string | null;
   bio: string | null;
   verified?: boolean;
+  follower_count?: number;
+  following_count?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -131,10 +133,7 @@ export async function createProfile(user: User) {
 export async function updateProfile(userId: string, updates: UpdateProfileData) {
   const { data, error } = await supabase
     .from('profiles')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq('id', userId)
     .select()
     .single();

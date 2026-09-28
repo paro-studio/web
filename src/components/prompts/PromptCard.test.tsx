@@ -37,7 +37,6 @@ describe("PromptCard", () => {
   const baseProps = {
     id: "prompt-1",
     title: "Cinematic portrait",
-    promptText: "A realistic portrait, 8k, photorealistic",
     imageUrl: "https://example.test/portrait.png",
     toolUsed: "Midjourney",
     copyCount: 12,
@@ -110,5 +109,41 @@ describe("PromptCard", () => {
 
     const copyButton = screen.getByLabelText("Copy prompt");
     expect(copyButton.className).toContain("[@media(hover:none)]:!opacity-100");
+  });
+
+  it("applies snappy transition tokens to card and image", () => {
+    renderPromptCard(baseProps);
+
+    const image = screen.getByAltText(baseProps.title);
+    expect(image).toHaveClass("transition-transform", "duration-medium");
+
+    const cardContainer = image.closest(".hover-lift");
+    expect(cardContainer).toBeInTheDocument();
+  });
+
+  it("renders view count stat when viewCount is provided", () => {
+    renderPromptCard({
+      ...baseProps,
+      viewCount: 150,
+    });
+
+    const viewsElement = screen.getByTitle("Views");
+    expect(viewsElement).toBeInTheDocument();
+    expect(viewsElement).toHaveTextContent("150");
+  });
+
+  // useAuth is mocked signed out above. Every gated action should open the sign
+  // in dialog through onLoginRequired, not just show a toast.
+  it.each([
+    ["Copy prompt"],
+    ["Like"],
+    ["Save"],
+  ])("asks a signed out user to sign in when they tap %s", (label) => {
+    const onLoginRequired = vi.fn();
+    renderPromptCard({ ...baseProps, onLoginRequired });
+
+    fireEvent.click(screen.getAllByLabelText(label)[0]);
+
+    expect(onLoginRequired).toHaveBeenCalledTimes(1);
   });
 });
