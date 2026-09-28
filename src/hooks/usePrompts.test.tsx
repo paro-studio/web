@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePrompts } from "./usePrompts";
-import { getAllPrompts } from "@/services/supabase/prompts";
+import { getAllPrompts, searchPrompts } from "@/services/supabase/prompts";
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: null, sessionLoading: false }),
@@ -12,6 +12,7 @@ vi.mock("@/hooks/useAuth", () => ({
 vi.mock("@/services/supabase/prompts", () => ({
   getAllPrompts: vi.fn(),
   getRecentPromptCreatorIds: vi.fn(),
+  searchPrompts: vi.fn(),
 }));
 
 vi.mock("@/services/supabase/profiles", () => ({
@@ -49,6 +50,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe("usePrompts", () => {
   beforeEach(() => {
     vi.mocked(getAllPrompts).mockReset().mockResolvedValue({ prompts: rows, error: null });
+    vi.mocked(searchPrompts).mockReset().mockResolvedValue({ prompts: rows, error: null });
   });
 
   it("re-sorts and filters cached rows without fetching again", async () => {
@@ -58,7 +60,8 @@ describe("usePrompts", () => {
     );
 
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data?.map((p) => p.id)).toEqual(["c", "a", "b"]);
+    // Trending score is views + copies * 3 + likes * 2: b 28, c 9, a 8.
+    expect(result.current.data?.map((p) => p.id)).toEqual(["b", "c", "a"]);
 
     rerender({ sortBy: "newest" });
     expect(result.current.data?.map((p) => p.id)).toEqual(["b", "c", "a"]);
@@ -68,5 +71,39 @@ describe("usePrompts", () => {
     expect(result.current.isLoading).toBe(false);
 
     expect(getAllPrompts).toHaveBeenCalledTimes(1);
+  });
+
+  it("queries searchPrompts using server-side search when searchQuery is provided", async () => {
+    vi.mocked(searchPrompts).mockResolvedValue({ prompts: [rows[0]], error: null });
+
+    const { result } = renderHook(
+      () => usePrompts({ searchQuery: "cyberpunk", selectedTags: ["city"] }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(searchPrompts).toHaveBeenCalledWith({
+      query: "cyberpunk",
+      tags: ["city"],
+      limit: 100,
+    });
+    expect(result.current.data?.map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("queries searchPrompts using server-side tag filtering when only selectedTags are provided", async () => {
+    vi.mocked(searchPrompts).mockResolvedValue({ prompts: [rows[0]], error: null });
+
+    const { result } = renderHook(
+      () => usePrompts({ selectedTags: ["city"] }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(searchPrompts).toHaveBeenCalledWith({
+      query: undefined,
+      tags: ["city"],
+      limit: 100,
+    });
+    expect(result.current.data?.map((p) => p.id)).toEqual(["a"]);
   });
 });

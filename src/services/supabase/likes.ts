@@ -29,23 +29,25 @@ export async function isLiked(userId: string, promptId: string): Promise<boolean
  * Get like count for a prompt
  */
 export async function getLikeCount(promptId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('likes')
-    .select('*', { count: 'exact', head: true })
-    .eq('prompt_id', promptId);
+  const { data, error } = await supabase
+    .from('prompts')
+    .select('like_count')
+    .eq('id', promptId)
+    .maybeSingle();
 
   if (error) {
     console.error('Error getting like count:', error);
     return 0;
   }
 
-  return count || 0;
+  return data?.like_count ?? 0;
 }
 
 /**
  * Like counts for many prompts in one query.
  *
- * `likes` is publicly readable, so this works for signed-out visitors too.
+ * Reads denormalized `like_count` directly from `prompts`, transferring only
+ * one row per requested prompt ID regardless of total like volume.
  * Prompts with no likes are simply absent from the map — read with `?? 0`.
  */
 export async function getLikeCounts(promptIds: string[]): Promise<Map<string, number>> {
@@ -53,9 +55,9 @@ export async function getLikeCounts(promptIds: string[]): Promise<Map<string, nu
   if (unique.length === 0) return new Map();
 
   const { data, error } = await supabase
-    .from('likes')
-    .select('prompt_id')
-    .in('prompt_id', unique);
+    .from('prompts')
+    .select('id, like_count')
+    .in('id', unique);
 
   if (error) {
     console.error('Error getting like counts:', error);
@@ -63,8 +65,8 @@ export async function getLikeCounts(promptIds: string[]): Promise<Map<string, nu
   }
 
   const counts = new Map<string, number>();
-  for (const { prompt_id } of data ?? []) {
-    counts.set(prompt_id, (counts.get(prompt_id) ?? 0) + 1);
+  for (const { id, like_count } of data ?? []) {
+    counts.set(id, like_count ?? 0);
   }
   return counts;
 }

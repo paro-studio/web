@@ -2,7 +2,7 @@
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { getAllPrompts, getRecentPromptCreatorIds } from "@/services/supabase/prompts";
+import { getAllPrompts, getRecentPromptCreatorIds, searchPrompts } from "@/services/supabase/prompts";
 import { getProfilesByIds } from "@/services/supabase/profiles";
 import { getLikeCounts, getLikedPromptIds } from "@/services/supabase/likes";
 import { getSavedPromptIds } from "@/services/supabase/saves";
@@ -42,22 +42,15 @@ export function usePrompts(options?: {
   const { user, sessionLoading } = useAuth();
   const { selectedTags = [], searchQuery = "", sortBy = "trending", limit = 50 } = options || {};
 
-  // Search, tags and sort all work on the same fetched rows, so they are
-  // applied in `select` rather than being part of the key. Putting them in the
-  // key refetched the whole feed and flashed skeletons on every sort or tag
-  // click, for data that was already in the cache.
+  const trimmedQuery = searchQuery.trim();
+  const isSearch = Boolean(trimmedQuery || selectedTags.length > 0);
   const tagsKey = JSON.stringify(selectedTags);
+
+  // Search queries use server-side full-text search (searchPrompts).
+  // Default feed rows are cached and re-sorted/filtered in memory without refetching.
   const selectFeed = useCallback(
     (allPrompts: PromptWithDetails[]) => {
       let filtered = allPrompts;
-
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(p =>
-          p.title.toLowerCase().includes(query) ||
-          p.tags.some(t => t.toLowerCase().includes(query))
-        );
-      }
 
       if (selectedTags.length > 0) {
         filtered = filtered.filter(p =>
@@ -73,26 +66,34 @@ export function usePrompts(options?: {
           } else if (sortBy === "most_copied") {
             return (b.copyCount || 0) - (a.copyCount || 0);
           } else {
-            // Trending: View count for now
-            return (b.viewCount || 0) - (a.viewCount || 0);
+            // Trending: copies count most, then likes, then views.
+            const score = (p: PromptWithDetails) =>
+              (p.viewCount || 0) + (p.copyCount || 0) * 3 + (p.likeCount || 0) * 2;
+            return score(b) - score(a);
           }
         })
         .slice(0, limit);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [searchQuery, tagsKey, sortBy, limit]
+    [tagsKey, sortBy, limit]
   );
 
   return useQuery({
     // The user id is in the key because isLiked and isSaved depend on it.
-    queryKey: promptsQueryKey(limit, user?.id),
+    // When searching, include query and tags in the key to fetch via searchPrompts.
+    queryKey: isSearch
+      ? ["prompts", "search", trimmedQuery, tagsKey, limit, user?.id ?? null]
+      : promptsQueryKey(limit, user?.id),
     queryFn: async () => {
-      const { prompts: allPrompts, error } = await getAllPrompts(limit * 2); // Get more for filtering
+      const { prompts: allPrompts, error } = isSearch
+        ? await searchPrompts({
+            query: trimmedQuery || undefined,
+            tags: selectedTags.length > 0 ? selectedTags : undefined,
+            limit: limit * 2,
+          })
+        : await getAllPrompts(limit * 2);
 
-      if (error) {
-        console.error('Error fetching prompts:', error);
-        return [];
-      }
+      if (error) throw error;
 
       // Enrich in bulk. Doing this per prompt meant 4 extra round trips each,
       // 200+ requests for a 50-prompt feed. These five run once, in parallel,
@@ -145,6 +146,7 @@ export function usePrompts(options?: {
       return enrichedPrompts;
     },
     select: selectFeed,
+    placeholderData: (previousData) => previousData,
     // Waits only for the stored session, which is read locally. Waiting on the
     // profile fetch as well held the whole feed back behind two extra round
     // trips it does not need.
@@ -160,10 +162,7 @@ export function useTopCreators(limit = 6) {
       // downloaded the full text of 200 prompts just to count them.
       const { userIds, error } = await getRecentPromptCreatorIds(200);
 
-      if (error) {
-        console.error('Error fetching prompts for top creators:', error);
-        return [];
-      }
+      if (error) throw error;
 
       const creatorIds = Array.from(new Set(userIds));
 

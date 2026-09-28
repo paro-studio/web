@@ -15,6 +15,8 @@ export interface Profile {
   cover_url: string | null;
   bio: string | null;
   verified?: boolean;
+  follower_count?: number;
+  following_count?: number;
   created_at?: string;
   updated_at?: string;
 }

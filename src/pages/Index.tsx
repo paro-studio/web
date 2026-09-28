@@ -1,3 +1,4 @@
+import { QueryError } from "@/components/QueryError";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Sparkles, Plus } from "lucide-react";
@@ -55,7 +56,7 @@ export default function Index() {
     navigate(pending, { replace: true });
   }, [authLoading, user, navigate]);
 
-  const { data: prompts, isLoading: promptsLoading } = usePrompts({
+  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch } = usePrompts({
     selectedTags,
     searchQuery,
     sortBy,
@@ -64,44 +65,7 @@ export default function Index() {
   // Always use fixed predefined tags - never changes based on user uploads
   const displayTags = [...STANDARD_TAGS];
 
-  // Filter prompts by search and tags
-  const filteredPrompts = useMemo(() => {
-    let result = prompts ?? [];
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.title.toLowerCase().includes(query) ||
-          p.tags.some((tag) => tag.toLowerCase().includes(query))
-      );
-    }
-
-    if (selectedTags.length > 0) {
-      result = result.filter((p) =>
-        selectedTags.some((tag) => p.tags.includes(tag))
-      );
-    }
-
-    // Sort
-    switch (sortBy) {
-      case "newest":
-        result = [...result].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  // camelCase
-        );
-        break;
-      case "most_copied":
-        result = [...result].sort((a, b) => b.copyCount - a.copyCount);  // camelCase
-        break;
-      case "trending":
-      default:
-        result = [...result].sort(
-          (a, b) => b.viewCount + b.copyCount * 3 + b.likeCount * 2 - (a.viewCount + a.copyCount * 3 + a.likeCount * 2)  // camelCase
-        );
-    }
-
-    return result;
-  }, [prompts, searchQuery, selectedTags, sortBy]);
+  const displayPrompts = useMemo(() => prompts ?? [], [prompts]);
 
   const handleTagToggle = (tag: string) => {
     const nextTags = selectedTags.includes(tag)
@@ -139,16 +103,16 @@ export default function Index() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  // Convert filtered prompts to FeedItem format and prepare for future ad injection
+  // Convert prompts to FeedItem format and prepare for future ad injection
   const feedItems: FeedItem[] = useMemo(() => {
-    const imageItems = filteredPrompts.map(toImageFeedItem);
+    const imageItems = displayPrompts.map(toImageFeedItem);
 
     // Ad injection ready - currently disabled (no ad provider)
     // When ads are ready, pass an ad generator function:
     // return injectAdvertisements(imageItems, 8, (index) => ({ type: "advertisement", data: { id: `ad-${index}` } }));
 
     return injectAdvertisements(imageItems, 8);
-  }, [filteredPrompts]);
+  }, [displayPrompts]);
 
   // Render feed items using FeedCard
   const renderFeed = () => {
@@ -230,6 +194,7 @@ export default function Index() {
               {sortBy === "most_copied" && "Most Copied Prompts"}
             </h2>
 
+            {isError && <QueryError resource="prompts" onRetry={() => { void refetch(); }} retrying={isFetching} />}
             {promptsLoading ? (
               <div className="masonry-grid">
                 {[...Array(8)].map((_, i) => (
@@ -240,7 +205,7 @@ export default function Index() {
                   </div>
                 ))}
               </div>
-            ) : filteredPrompts.length === 0 ? (
+            ) : isError && !prompts ? null : displayPrompts.length === 0 ? (
               searchQuery.trim() || selectedTags.length > 0 ? (
                 <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
                   <p className="font-serif text-lg sm:text-xl text-muted-foreground">
