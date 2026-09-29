@@ -499,7 +499,15 @@ export function PromptCard({
             </DropdownMenuTrigger>
             
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleShare}>
+              {/* No preventDefault on items that open a dialog: Radix keeps the
+                  menu open when the click is default prevented, which leaves
+                  it behind the dialog and loses focus when the dialog closes. */}
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShareOpen(true);
+                }}
+              >
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </DropdownMenuItem>
@@ -543,7 +551,6 @@ export function PromptCard({
               ) : (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     if (!user) {
                       onLoginRequired?.();

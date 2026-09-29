@@ -111,7 +111,7 @@ describe("PromptCard", () => {
     ).toBeInTheDocument();
 
     // Dropdown menu should be dismissed, avoiding lingering behind the dialog
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu", { hidden: true })).not.toBeInTheDocument();
 
     const cancelButton = screen.getByRole("button", { name: "Cancel" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
@@ -121,6 +121,26 @@ describe("PromptCard", () => {
     // Clicking cancel should dismiss the dialog
     fireEvent.click(cancelButton);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  // Items that open a dialog must let the menu close first, or it stays open
+  // behind the dialog and focus is lost when the dialog closes.
+  it.each([
+    ["Share", { id: "creator-1" }],
+    ["Report", { id: "viewer-1" }],
+  ])("closes the menu before opening the %s dialog", (label, viewer) => {
+    mockUser = viewer;
+    mockProfile = viewer;
+    renderPromptCard(baseProps);
+
+    const [, desktopTrigger] = screen.getAllByLabelText("More options");
+    fireEvent.pointerDown(desktopTrigger, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(desktopTrigger, { key: "ArrowDown" });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: label }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("menu", { hidden: true })).not.toBeInTheDocument();
   });
 
   it("applies snappy transition tokens to card and image", () => {
