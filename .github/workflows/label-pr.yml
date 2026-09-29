@@ -1,0 +1,51 @@
+name: Label PR
+
+# Adds a label from the PR title's prefix, so release notes can group PRs
+# (see .github/release.yml). "fix(prompts): ..." gets bug, "feat: ..." gets
+# enhancement, and so on. It only adds labels, never removes them, so a
+# maintainer's own labels stay put.
+#
+# pull_request_target is needed so this can label PRs from forks. That trigger
+# runs with a write token against the base repo, so this workflow must NEVER
+# check out or run code from the pull request. It only reads the title.
+# Do not add actions/checkout here.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      # Pinned to a SHA because this workflow runs with a write token.
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const LABELS = {
+              feat: 'enhancement',
+              fix: 'bug',
+              perf: 'performance',
+              docs: 'documentation',
+              test: 'infrastructure',
+              chore: 'infrastructure',
+              ci: 'infrastructure',
+              build: 'infrastructure',
+              refactor: 'infrastructure',
+            };
+
+            const pr = context.payload.pull_request;
+            const prefix = pr.title.match(/^(\w+)(?:\([^)]*\))?!?:/)?.[1]?.toLowerCase();
+            const label = LABELS[prefix];
+            if (!label || pr.labels.some(l => l.name === label)) return;
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: [label],
+            });
