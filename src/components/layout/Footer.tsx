@@ -33,10 +33,19 @@ export function Footer() {
                 <Link to="/originals" className="hover:text-foreground transition-colors">PARO Originals</Link>
               </li>
               <li>
+                <Link to="/top-creators" className="hover:text-foreground transition-colors">Top Creators</Link>
+              </li>
+              <li>
                 <Link to="/upload" className="hover:text-foreground transition-colors">Create Prompt</Link>
               </li>
               <li>
+                <Link to="/earn" className="hover:text-foreground transition-colors">Earn With PARO</Link>
+              </li>
+              <li>
                 <Link to="/guidelines" className="hover:text-foreground transition-colors">Community Guidelines</Link>
+              </li>
+              <li>
+                <Link to="/feedback" className="hover:text-foreground transition-colors">Feedback</Link>
               </li>
             </ul>
           </div>
