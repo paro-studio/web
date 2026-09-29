@@ -40,7 +40,11 @@ function AccountHeader({ profileId, avatarUrl, displayName, username, email }: A
       </Avatar>
       <div className="min-w-0">
         <p className="text-sm font-medium truncate">{name}</p>
-        {username && <p className="text-xs text-muted-foreground truncate">@{username}</p>}
+        {/* Muted grey is unreadable on the highlight, so follow the item's
+            highlighted text colour, a little softer than the name. */}
+        {username && (
+          <p className="text-xs text-muted-foreground group-focus:text-accent-foreground/70 truncate">@{username}</p>
+        )}
       </div>
     </>
   );
@@ -51,7 +55,7 @@ function AccountHeader({ profileId, avatarUrl, displayName, username, email }: A
 
   return (
     <DropdownMenuItem asChild>
-      <Link to={`/profile/${profileId}`} className="flex items-center gap-3 py-2">
+      <Link to={`/profile/${profileId}`} className="group flex items-center gap-3 py-2">
         {content}
       </Link>
     </DropdownMenuItem>
