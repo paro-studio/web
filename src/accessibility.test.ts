@@ -45,13 +45,17 @@ describe("Accessibility Standards", () => {
   const cssPath = path.resolve(process.cwd(), "src/index.css");
   const indexCss = fs.readFileSync(cssPath, "utf-8");
 
-  it("ensures dark mode borders hit at least 3:1 contrast ratio against background", () => {
-    // Extract dark mode border and background
+  // WCAG 1.4.11 asks for 3:1 on the outlines you need to find a control, which
+  // is --input (inputs, selects, outline buttons). --border is for dividers
+  // that only separate sections, which the rule does not cover, so it is
+  // kept quieter on purpose.
+  it("ensures dark mode control outlines hit at least 3:1 contrast ratio against background", () => {
+    // Extract dark mode control outline and background
     const darkSectionMatch = indexCss.match(/\.dark\s*\{([^}]+)\}/);
     expect(darkSectionMatch).toBeTruthy();
     const darkSection = darkSectionMatch![1];
 
-    const borderMatch = darkSection.match(/--border:\s*(\d+)\s+(\d+)%\s+(\d+)%/);
+    const borderMatch = darkSection.match(/--input:\s*(\d+)\s+(\d+)%\s+(\d+)%/);
     const bgMatch = darkSection.match(/--background:\s*(\d+)\s+(\d+)%\s+(\d+)%/);
 
     expect(borderMatch).toBeTruthy();
