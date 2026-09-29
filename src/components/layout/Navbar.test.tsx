@@ -112,6 +112,28 @@ describe("Navbar Dropdown Menus", () => {
     expect(earnSpan?.className).toContain("group-focus:text-black");
   });
 
+  // Settings is where account deletion lives, so it has to be reachable from
+  // both menus, not only through the Edit Profile button.
+  it("links to Settings from the desktop and mobile dropdowns", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    const desktopTrigger = screen.getAllByRole("button").filter((btn) => btn.className.includes("rounded-full"))[0];
+    fireEvent.pointerDown(desktopTrigger, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(desktopTrigger, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    const mobileSection = container.querySelector(".flex.lg\\:hidden");
+    const mobileAvatarButton = mobileSection?.querySelectorAll("button")[1];
+    fireEvent.pointerDown(mobileAvatarButton!, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(mobileAvatarButton!, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/settings");
+  });
+
   it("renders Support link pointing to support@parostudios.in in mobile dropdown", async () => {
     const { container } = render(
       <MemoryRouter>

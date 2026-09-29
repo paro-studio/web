@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, X, Sparkles, TrendingUp, Copy, Clock, Users, HelpCircle, Plus, Heart, Bookmark, DollarSign, MessageSquare, FileText, Github } from "lucide-react";
+import { Search, X, Sparkles, TrendingUp, Copy, Clock, Users, HelpCircle, Plus, Heart, Bookmark, DollarSign, MessageSquare, FileText, Github, Settings } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,9 +158,17 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     {profile?.id && (
-                      <DropdownMenuItem asChild>
-                        <Link to={`/profile/${profile.id}`}>Profile</Link>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link to={`/profile/${profile.id}`}>Profile</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/settings" className="flex items-center gap-2">
+                            <Settings className="h-4 w-4" />
+                            Settings
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     <DropdownMenuItem asChild>
                       <Link to="/upload">Upload Prompt</Link>
@@ -316,9 +324,17 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
 
                     {/* Profile Links */}
                     {profile?.id && (
-                      <DropdownMenuItem asChild>
-                        <Link to={`/profile/${profile.id}`}>Profile</Link>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link to={`/profile/${profile.id}`}>Profile</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/settings" className="flex items-center gap-2">
+                            <Settings className="h-4 w-4" />
+                            Settings
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     <DropdownMenuItem asChild>
                       <Link to="/saved" className="flex items-center gap-2">
