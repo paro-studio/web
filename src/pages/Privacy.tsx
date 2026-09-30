@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 // Where people reach the team. Add the support email here once there is one.
 export const DISCORD_URL = "https://discord.com/invite/zNZ3TAwy73";
 
-export const PRIVACY_UPDATED = "30 September 2026";
+export const PRIVACY_UPDATED = "1 October 2026";
 
 interface PolicySection {
   title: string;
@@ -35,6 +35,7 @@ const SECTIONS: PolicySection[] = [
       "What you post: each prompt's image, title, prompt text, AI tool and tags.",
       "What you do: the prompts you like, save and rate, the people you follow, and the prompts you report or feedback you send.",
       "Counts of views and copies. When you are signed out, a view is counted against a one way hash of your IP address, never the address itself. When you are signed in, it is counted against your account. These records are deleted after two days.",
+      "Crash and error reports from the app: what went wrong and where in the code, your phone's model and Android version, and the last few screens you opened. Never your email or anything you posted.",
     ],
   },
   {
@@ -60,7 +61,8 @@ const SECTIONS: PolicySection[] = [
     title: "How we use it",
     paragraphs: [
       "To run Paro: to sign you in, show your profile and prompts, count views and copies, keep to the daily posting limit, and look into reports.",
-      "We do not sell your data, show ads, or use analytics or tracking tools.",
+      "Crash reports are used only to find and fix problems in the app.",
+      "We do not sell your data, show ads, or track you across other apps and websites.",
     ],
   },
   {
@@ -69,6 +71,7 @@ const SECTIONS: PolicySection[] = [
       "Supabase stores the database, sign in and uploaded images.",
       "Google handles sign in.",
       "Vercel hosts the website.",
+      "Sentry receives the app's crash and error reports.",
     ],
     paragraphs: ["They process data only to provide those services to us."],
   },
@@ -81,7 +84,7 @@ const SECTIONS: PolicySection[] = [
   {
     title: "How long we keep it",
     paragraphs: [
-      "Your account and everything in it stay until you delete them. View and copy records are deleted after two days.",
+      "Your account and everything in it stay until you delete them. View and copy records are deleted after two days. Crash reports are kept by Sentry for up to 90 days.",
     ],
   },
   {
