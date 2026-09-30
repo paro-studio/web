@@ -45,6 +45,9 @@ export function Footer() {
                 <Link to="/guidelines" className="hover:text-foreground transition-colors">Community Guidelines</Link>
               </li>
               <li>
+                <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+              </li>
+              <li>
                 <Link to="/feedback" className="hover:text-foreground transition-colors">Feedback</Link>
               </li>
             </ul>
