@@ -2,7 +2,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Link } from "react-router-dom";
 import { Trash2 } from "lucide-react";
-import { DISCORD_URL } from "./Privacy";
+import { DISCORD_URL, SUPPORT_EMAIL } from "./Privacy";
 
 const DELETED = [
   "Your account and sign in",
@@ -82,7 +82,11 @@ export default function DeleteAccountInfo() {
             <section className="space-y-3">
               <h2 className="text-xl sm:text-2xl font-serif text-foreground">Can't sign in?</h2>
               <p className="text-muted-foreground leading-relaxed">
-                If you can no longer sign in, ask us on our{" "}
+                If you can no longer sign in, email{" "}
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-gold underline underline-offset-4">
+                  {SUPPORT_EMAIL}
+                </a>{" "}
+                or ask us on our{" "}
                 <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="text-gold underline underline-offset-4">
                   Discord
                 </a>{" "}

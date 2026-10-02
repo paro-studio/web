@@ -3,10 +3,11 @@ import { Footer } from "@/components/layout/Footer";
 import { Link } from "react-router-dom";
 import { Lock } from "lucide-react";
 
-// Where people reach the team. Add the support email here once there is one.
+// Where people reach the team.
 export const DISCORD_URL = "https://discord.com/invite/zNZ3TAwy73";
+export const SUPPORT_EMAIL = "parostudio2026@gmail.com";
 
-export const PRIVACY_UPDATED = "1 October 2026";
+export const PRIVACY_UPDATED = "3 October 2026";
 
 interface PolicySection {
   title: string;
@@ -147,7 +148,11 @@ export default function Privacy() {
             <section className="space-y-3">
               <h2 className="text-xl sm:text-2xl font-serif text-foreground">Contact</h2>
               <p className="text-muted-foreground leading-relaxed">
-                For anything about your data, reach the team on our{" "}
+                For anything about your data, email{" "}
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-gold underline underline-offset-4">
+                  {SUPPORT_EMAIL}
+                </a>{" "}
+                or reach the team on our{" "}
                 <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="text-gold underline underline-offset-4">
                   Discord
                 </a>
