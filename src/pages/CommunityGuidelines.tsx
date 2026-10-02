@@ -56,6 +56,8 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     subtitle: "Don't post content that could seriously harm or exploit others.",
     items: [
       "No threats or encouragement of violence.",
+      "No graphic or gory violence.",
+      "No nudity or sexually explicit images.",
       "No sexual content involving minors.",
       "No exploitation or abuse.",
       "No content intended to facilitate serious wrongdoing.",
