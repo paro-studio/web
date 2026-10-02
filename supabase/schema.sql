@@ -100,6 +100,7 @@ create table if not exists public.feedback (
   user_id    uuid        not null references auth.users (id) on delete cascade,
   subject    text        not null,
   message    text        not null,
+  user_email text,
   created_at timestamptz not null default now()
 );
 
@@ -140,6 +141,7 @@ create table if not exists public.prompt_reports (
 -- a checkpoint, not a wish list.
 create index if not exists prompt_ratings_prompt_id_idx on public.prompt_ratings (prompt_id);
 create index if not exists prompt_reports_prompt_id_idx on public.prompt_reports (prompt_id);
+create index if not exists feedback_user_email_idx on public.feedback (user_email);
 
 -- Named separately in production rather than declared inline on the tables
 -- above, so they are reproduced with the names production uses. Renaming them
@@ -649,6 +651,10 @@ alter table public.feedback
 alter table public.feedback
   add constraint feedback_message_length check (char_length(message) <= 10000) not valid;
 
+alter table public.feedback
+  add constraint if not exists feedback_user_email_format
+    check (user_email IS NULL OR user_email ~ '^\S+@\S+\.\S+$') not valid;
+
 alter table public.prompt_reports
   add constraint prompt_reports_details_length check (char_length(details) <= 2000) not valid;
 
@@ -659,6 +665,7 @@ do $$
 begin
   alter table public.feedback validate constraint feedback_subject_length;
   alter table public.feedback validate constraint feedback_message_length;
+  alter table public.feedback validate constraint feedback_user_email_format;
   alter table public.prompt_reports validate constraint prompt_reports_details_length;
 exception
   when check_violation then

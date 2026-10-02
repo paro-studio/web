@@ -18,7 +18,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import { submitFeedback } from "@/services/supabase/feedback";
+import { submitFeedback, sendFeedbackEmail } from "@/services/supabase/feedback";
 import { getErrorMessage } from "@/lib/errors";
 
 // The upper bounds sit just under the check constraints on public.feedback.
@@ -72,19 +72,34 @@ export function FeedbackForm({ className }: FeedbackFormProps) {
         setIsSubmitting(true);
 
         try {
-            const { error } = await submitFeedback({
+            // Step 1: Insert feedback into database
+            const { error: dbError } = await submitFeedback({
                 user_id: user.id,
                 subject: values.subject,
                 message: values.message,
             });
 
-            if (error) {
+            if (dbError) {
                 toast({
                     variant: "destructive",
                     title: "Could not send feedback",
-                    description: getErrorMessage(error, "Please try again."),
+                    description: getErrorMessage(dbError, "Please try again."),
                 });
                 return;
+            }
+
+            // Step 2: Send email notification (non-blocking)
+            // If email fails, we still show success since the feedback was saved to the database
+            const { error: emailError } = await sendFeedbackEmail({
+                user_id: user.id,
+                subject: values.subject,
+                message: values.message,
+                user_email: user.email,
+            });
+
+            if (emailError) {
+                // Log warning but don't fail UX—feedback is already saved
+                console.warn('Email notification failed:', emailError);
             }
 
             toast({
