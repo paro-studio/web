@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Instagram, Github } from "lucide-react";
+import { Instagram, Github, Mail } from "lucide-react";
 import { DiscordIcon } from "@/components/prompts/brandIcons";
 
 export function Footer() {
@@ -83,6 +83,15 @@ export function Footer() {
                 aria-label="GitHub"
               >
                 <Github className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </a>
+              <a
+                href="https://mail.google.com/mail/?view=cm&fs=1&to=parostudio2026@gmail.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group p-1.5 rounded-full hover:bg-secondary transition-colors"
+                aria-label="Email us at parostudio2026@gmail.com"
+              >
+                <Mail className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
               </a>
             </div>
             <p className="text-xs text-muted-foreground pt-1">

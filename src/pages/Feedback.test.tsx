@@ -16,15 +16,66 @@ vi.mock("@/components/profile/FeedbackForm", () => ({
 }));
 
 describe("Feedback Page", () => {
-  it("renders consistent support email with mailto link", () => {
+  it("renders page layout and content", () => {
     render(
       <MemoryRouter>
         <Feedback />
       </MemoryRouter>
     );
 
-    const emailLink = screen.getByRole("link", { name: "support@parostudios.in" });
-    expect(emailLink).toBeDefined();
-    expect(emailLink.getAttribute("href")).toBe("mailto:support@parostudios.in");
+    expect(screen.getByTestId("navbar")).toBeInTheDocument();
+    expect(screen.getByTestId("footer")).toBeInTheDocument();
+  });
+
+  it("renders heading 'We'd love to hear from you'", () => {
+    render(
+      <MemoryRouter>
+        <Feedback />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/We'd love to hear from you/i)).toBeInTheDocument();
+  });
+
+  it("renders 'Send a Message' heading", () => {
+    render(
+      <MemoryRouter>
+        <Feedback />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Send a Message/i)).toBeInTheDocument();
+  });
+
+  it("renders FeedbackForm component", () => {
+    render(
+      <MemoryRouter>
+        <Feedback />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId("feedback-form")).toBeInTheDocument();
+  });
+
+  it("renders email contact link as fallback", () => {
+    render(
+      <MemoryRouter>
+        <Feedback />
+      </MemoryRouter>
+    );
+
+    const emailLink = screen.getByRole("link", { name: "parostudio2026@gmail.com" });
+    expect(emailLink).toBeInTheDocument();
+    expect(emailLink.getAttribute("href")).toBe("mailto:parostudio2026@gmail.com");
+  });
+
+  it("renders 'Email Us' contact card on desktop", () => {
+    render(
+      <MemoryRouter>
+        <Feedback />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Email Us/i)).toBeInTheDocument();
   });
 });
