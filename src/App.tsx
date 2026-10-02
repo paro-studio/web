@@ -20,6 +20,7 @@ import Index from "./pages/Index";
 const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
 const CommunityGuidelines = lazy(() => import("./pages/CommunityGuidelines"));
 const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
 const DeleteAccountInfo = lazy(() => import("./pages/DeleteAccountInfo"));
 const ParoOriginals = lazy(() => import("./pages/ParoOriginals"));
 const PromptDetail = lazy(() => import("./pages/PromptDetail"));
@@ -78,6 +79,7 @@ const App = () => (
                 <Route path="/community-guidelines" element={<CommunityGuidelines />} />
                 {/* Public on purpose: Google Play links both from the store listing. */}
                 <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="/delete-account" element={<DeleteAccountInfo />} />
 
                 {/* Open to everyone so shared links work. The prompt text itself is

@@ -3,12 +3,13 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import Privacy from "./Privacy";
 import DeleteAccountInfo from "./DeleteAccountInfo";
+import Terms from "./Terms";
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: null, profile: null, signOut: vi.fn(), loading: false }),
 }));
 
-describe("Privacy and account deletion pages", () => {
+describe("Privacy, terms and account deletion pages", () => {
   it("renders the privacy policy, public to signed out visitors", () => {
     render(
       <MemoryRouter>
@@ -22,6 +23,19 @@ describe("Privacy and account deletion pages", () => {
       "href",
       "/delete-account"
     );
+  });
+
+  it("renders the terms of use with the posting rules and links to the other policies", () => {
+    render(
+      <MemoryRouter>
+        <Terms />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { name: "Terms of Use" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What is not allowed" })).toBeInTheDocument();
+    expect(screen.getByText("Nudity or sexually explicit images.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "privacy policy" })).toHaveAttribute("href", "/privacy");
   });
 
   it("explains how to delete an account in the app and on the website", () => {
