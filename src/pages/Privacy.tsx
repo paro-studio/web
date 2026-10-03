@@ -105,7 +105,7 @@ const SECTIONS: PolicySection[] = [
   {
     title: "Children",
     paragraphs: [
-      "Paro is not meant for children under 13, and we do not knowingly collect their data.",
+      "Paro is for adults and is not meant for anyone under 18. We do not knowingly collect data from anyone under 18, and we delete an account if we learn it belongs to someone younger.",
     ],
   },
   {

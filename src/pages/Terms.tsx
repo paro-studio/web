@@ -29,7 +29,7 @@ const SECTIONS: TermsSection[] = [
   {
     title: "Who can use Paro",
     items: [
-      "You must be at least 13 years old, and old enough to agree to these terms where you live.",
+      "Paro is for adults. You must be at least 18 years old to use it.",
       "Anyone can browse without an account. Copying, liking, saving, following, rating, reporting and posting need one.",
     ],
   },
