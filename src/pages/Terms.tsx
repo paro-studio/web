@@ -67,7 +67,7 @@ const SECTIONS: TermsSection[] = [
   {
     title: "Reports and removal",
     items: [
-      "Any signed in user can report a prompt. The Paro team reviews reports.",
+      "Any signed in user can report a prompt or an account, and block an account so its prompts stop appearing for them. The Paro team reviews every report.",
       "We may remove any post, and suspend or delete any account, that breaks these terms or the Community Guidelines. We can do this without warning when the content is harmful.",
       "If you think we removed something by mistake, write to us and we will look again.",
     ],

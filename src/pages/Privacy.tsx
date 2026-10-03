@@ -34,7 +34,8 @@ const SECTIONS: PolicySection[] = [
       "Your Google account's email address, name and profile photo, when you sign in with Google. Google is the only way to sign in.",
       "What you add to your profile: your username, display name, bio, profile photo and banner.",
       "What you post: each prompt's image, title, prompt text, AI tool and tags.",
-      "What you do: the prompts you like, save and rate, the people you follow, and the prompts you report or feedback you send.",
+      "What you do: the prompts you like, save and rate, the people you follow, the accounts you block, and the prompts or accounts you report or feedback you send.",
+      "What you type into search, sent so the search can run. It is not saved on our side.",
       "Counts of views and copies. When you are signed out, a view is counted against a one way hash of your IP address, never the address itself. When you are signed in, it is counted against your account. These records are deleted after two days.",
       "Crash and error reports from the app: what went wrong and where in the code, your phone's model and Android version, and the last few screens you opened. Never your email or anything you posted.",
     ],
@@ -55,6 +56,7 @@ const SECTIONS: PolicySection[] = [
     items: [
       "Your email address. It is never shown to anyone.",
       "Your saved prompts. Only you can see them.",
+      "Who you have blocked. Only you can see that, and the other person is not told.",
       "Your reports and feedback. Only the Paro team can read them.",
     ],
   },
@@ -77,9 +79,15 @@ const SECTIONS: PolicySection[] = [
     paragraphs: ["They process data only to provide those services to us."],
   },
   {
+    title: "How it is protected",
+    paragraphs: [
+      "Everything travels between your device and our servers over an encrypted connection (HTTPS). The database only lets each person change their own profile, prompts and activity.",
+    ],
+  },
+  {
     title: "On your phone",
     paragraphs: [
-      "The app keeps a few things on your phone so it works well: your sign in, recently loaded and saved prompts so they open offline, an unfinished post as a draft, recent searches and your light or dark setting. Signing out removes your sign in, the saved prompts and the draft. Uninstalling the app removes all of it.",
+      "The app keeps a few things on your phone so it works well: your sign in, recently loaded and saved prompts so they open offline, an unfinished post as a draft, recent searches, your light or dark setting, and small notes such as having accepted the terms or which prompts you were asked to rate. Signing out removes your sign in, the saved prompts and the draft. Uninstalling the app removes all of it.",
     ],
   },
   {

@@ -58,7 +58,7 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
       "No threats or encouragement of violence.",
       "No graphic or gory violence.",
       "No nudity or sexually explicit images.",
-      "No sexual content involving minors.",
+      "No sexual content involving minors, and nothing that sexualises or endangers children. We remove it, ban the account and report it to the authorities where required.",
       "No exploitation or abuse.",
       "No content intended to facilitate serious wrongdoing.",
       "Don't share someone's private or sensitive information without their permission.",
@@ -144,7 +144,7 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     subtitle: "See something that violates these guidelines?",
     badge: "Report it.",
     paragraph:
-      "When you report content, provide enough information for the Paro team to understand the issue. Please don't use reports to target people simply because you disagree with them.",
+      "You can report a prompt from its menu and an account from its profile, and block any account so its prompts stop appearing for you. The Paro team reviews every report. When you report, provide enough information for us to understand the issue. Please don't use reports to target people simply because you disagree with them.",
   },
   {
     id: 10,

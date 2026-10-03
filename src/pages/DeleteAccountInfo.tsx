@@ -74,8 +74,10 @@ export default function DeleteAccountInfo() {
                 ))}
               </ul>
               <p className="text-muted-foreground leading-relaxed">
-                Nothing is kept afterwards. If you sign in again with the same Google account, you start
-                a new, empty account.
+                Nothing in your account is kept afterwards. Crash reports from the app, which never
+                contain your email or content, stay with our crash reporting service for up to 90
+                days. If you sign in again with the same Google account, you start a new, empty
+                account.
               </p>
             </section>
 
