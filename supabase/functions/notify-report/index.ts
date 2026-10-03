@@ -1,17 +1,23 @@
 /**
  * notify-report: posts a message to a private Discord channel whenever
- * someone reports a prompt or an account.
+ * someone reports a prompt or an account, or sends feedback.
  *
- * Why it exists: reports land in prompt_reports and user_reports, which
- * nobody can read through the API, so the only way to see one was to open
- * the Supabase dashboard and look. Google Play expects reports to be acted
- * on, and a report nobody knows about is not acted on.
+ * Why it exists: reports land in prompt_reports and user_reports, and
+ * feedback in feedback, and nobody can read any of the three through the
+ * API. The only way to see one was to open the Supabase dashboard and look.
+ * Google Play expects reports to be acted on, and a report nobody knows
+ * about is not acted on. Feedback had the same problem: it was written down
+ * and never read.
  *
- * How it is called: by two Database Webhooks (Dashboard > Database >
- * Webhooks), one on INSERT into each table. They send the new row as
+ * How it is called: by Database Webhooks (Dashboard > Integrations >
+ * Database Webhooks), one on INSERT into each table. They send the new row
+ * as
  *
  *   { "type": "INSERT", "table": "prompt_reports", "schema": "public",
  *     "record": { ... } }
+ *
+ * When creating a hook, pick this function in the Edge Function dropdown. It
+ * defaults to the first function in the list, which is not this one.
  *
  * Who may call it: nobody but those webhooks. A database webhook has no
  * signed in user, so JWT verification is off for this function (see
@@ -21,30 +27,43 @@
  * into the channel.
  *
  * The message never trusts the request for more than the row's id. It reads
- * the report back from the database, so a caller cannot invent its contents,
- * and looks up the names that make it readable: who reported, which prompt
- * or account, and a link to open it.
+ * the row back from the database, so a caller cannot invent its contents,
+ * and looks up the names that make it readable: who sent it, which prompt or
+ * account it is about, and a link to open.
  *
  * Secrets, set once with `supabase secrets set`, never committed:
  *
- *   DISCORD_REPORTS_WEBHOOK_URL   the channel's webhook URL
- *   REPORT_WEBHOOK_SECRET         any long random string
+ *   DISCORD_REPORTS_WEBHOOK_URL    the reports channel's webhook URL
+ *   DISCORD_FEEDBACK_WEBHOOK_URL   optional: a separate channel for feedback.
+ *                                  Without it, feedback goes to the reports
+ *                                  channel
+ *   REPORT_WEBHOOK_SECRET          any long random string
  *
  * SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY come from the runtime.
  *
  * Deploy: npx supabase functions deploy notify-report
  */
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const SITE_URL = "https://www.parostudios.in";
-const TABLES = ["prompt_reports", "user_reports"] as const;
-type ReportTable = (typeof TABLES)[number];
+const TABLES = ["prompt_reports", "user_reports", "feedback"] as const;
+type Table = (typeof TABLES)[number];
 
 /** Discord's limit for an embed field value. */
 const FIELD_MAX = 1024;
-/** Paro's destructive red, as Discord wants it. */
+/** Paro's destructive red and its gold, as Discord wants them. */
 const RED = 0xb84a4a;
+const GOLD = 0xc9a45c;
+
+type Field = { name: string; value: string; inline?: boolean };
+type Message = {
+  title: string;
+  url: string;
+  color: number;
+  timestamp: string;
+  fields: Field[];
+};
 
 function reply(status: number, body: Record<string, string>) {
   return new Response(JSON.stringify(body), {
@@ -69,12 +88,105 @@ const clip = (text: string, max = FIELD_MAX) =>
 const handle = (profile: { username: string | null; full_name: string | null } | null) =>
   profile?.username ? `@${profile.username}` : profile?.full_name || "someone without a username";
 
+const promptUrl = (id: string) => `${SITE_URL}/prompt/${id}`;
+const profileUrl = (id: string) => `${SITE_URL}/profile/${id}`;
+
+async function profileOf(admin: SupabaseClient, userId: string) {
+  const { data } = await admin
+    .from("profiles")
+    .select("username, full_name")
+    .eq("id", userId)
+    .maybeSingle();
+  return data;
+}
+
+/** The message for one row, or null when there is no such row. */
+async function describe(admin: SupabaseClient, table: Table, id: string): Promise<Message | null> {
+  if (table === "prompt_reports") {
+    const { data } = await admin
+      .from("prompt_reports")
+      .select("user_id, prompt_id, reason, details, created_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return null;
+
+    const { data: prompt } = await admin
+      .from("prompts")
+      .select("title, user_id")
+      .eq("id", data.prompt_id)
+      .maybeSingle();
+    const owner = prompt ? await profileOf(admin, prompt.user_id) : null;
+    const link = promptUrl(data.prompt_id);
+
+    return {
+      title: "A prompt was reported",
+      url: link,
+      color: RED,
+      timestamp: data.created_at,
+      fields: [
+        {
+          name: "Reported",
+          value: prompt ? `"${prompt.title}" by ${handle(owner)}` : "A prompt that has since been deleted",
+        },
+        { name: "Reason", value: data.reason, inline: true },
+        { name: "Reported by", value: handle(await profileOf(admin, data.user_id)), inline: true },
+        ...(data.details ? [{ name: "Details", value: data.details }] : []),
+        { name: "Open", value: link },
+      ],
+    };
+  }
+
+  if (table === "user_reports") {
+    const { data } = await admin
+      .from("user_reports")
+      .select("user_id, reported_id, reason, details, created_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return null;
+    const link = profileUrl(data.reported_id);
+
+    return {
+      title: "An account was reported",
+      url: link,
+      color: RED,
+      timestamp: data.created_at,
+      fields: [
+        { name: "Reported", value: handle(await profileOf(admin, data.reported_id)) },
+        { name: "Reason", value: data.reason, inline: true },
+        { name: "Reported by", value: handle(await profileOf(admin, data.user_id)), inline: true },
+        ...(data.details ? [{ name: "Details", value: data.details }] : []),
+        { name: "Open", value: link },
+      ],
+    };
+  }
+
+  const { data } = await admin
+    .from("feedback")
+    .select("user_id, subject, message, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const link = profileUrl(data.user_id);
+
+  return {
+    title: "New feedback",
+    url: link,
+    color: GOLD,
+    timestamp: data.created_at,
+    fields: [
+      { name: "Subject", value: data.subject || "(none)" },
+      { name: "Message", value: data.message || "(empty)" },
+      { name: "From", value: `${handle(await profileOf(admin, data.user_id))}\n${link}` },
+    ],
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return reply(405, { error: "Use POST" });
 
   const secret = Deno.env.get("REPORT_WEBHOOK_SECRET");
-  const discordUrl = Deno.env.get("DISCORD_REPORTS_WEBHOOK_URL");
-  if (!secret || !discordUrl) {
+  const reportsUrl = Deno.env.get("DISCORD_REPORTS_WEBHOOK_URL");
+  if (!secret || !reportsUrl) {
     console.error("notify-report is missing REPORT_WEBHOOK_SECRET or DISCORD_REPORTS_WEBHOOK_URL");
     return reply(500, { error: "Not configured" });
   }
@@ -90,10 +202,10 @@ Deno.serve(async (req) => {
     return reply(400, { error: "Expected JSON" });
   }
 
-  const table = TABLES.find((name) => name === payload.table) as ReportTable | undefined;
+  const table = TABLES.find((name) => name === payload.table);
   const id = payload.record?.id;
   if (payload.type !== "INSERT" || !table || typeof id !== "string") {
-    return reply(400, { error: "Expected an INSERT on a reports table" });
+    return reply(400, { error: "Expected an INSERT on a reports or feedback table" });
   }
 
   const admin = createClient(
@@ -102,75 +214,23 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
-  const profileOf = async (userId: string) => {
-    const { data } = await admin
-      .from("profiles")
-      .select("username, full_name")
-      .eq("id", userId)
-      .maybeSingle();
-    return data;
-  };
+  const message = await describe(admin, table, id);
+  if (!message) return reply(404, { error: "No such row" });
 
-  let title: string;
-  let subject: string;
-  let link: string;
-  let report: { user_id: string; reason: string; details: string | null; created_at: string };
-
-  if (table === "prompt_reports") {
-    const { data, error } = await admin
-      .from("prompt_reports")
-      .select("user_id, prompt_id, reason, details, created_at")
-      .eq("id", id)
-      .maybeSingle();
-    if (error || !data) return reply(404, { error: "No such report" });
-    report = data;
-
-    const { data: prompt } = await admin
-      .from("prompts")
-      .select("title, user_id")
-      .eq("id", data.prompt_id)
-      .maybeSingle();
-    const owner = prompt ? await profileOf(prompt.user_id) : null;
-
-    title = "A prompt was reported";
-    subject = prompt ? `"${prompt.title}" by ${handle(owner)}` : "A prompt that has since been deleted";
-    link = `${SITE_URL}/prompt/${data.prompt_id}`;
-  } else {
-    const { data, error } = await admin
-      .from("user_reports")
-      .select("user_id, reported_id, reason, details, created_at")
-      .eq("id", id)
-      .maybeSingle();
-    if (error || !data) return reply(404, { error: "No such report" });
-    report = data;
-
-    title = "An account was reported";
-    subject = handle(await profileOf(data.reported_id));
-    link = `${SITE_URL}/profile/${data.reported_id}`;
-  }
-
-  const reporter = handle(await profileOf(report.user_id));
+  const discordUrl =
+    table === "feedback" ? Deno.env.get("DISCORD_FEEDBACK_WEBHOOK_URL") || reportsUrl : reportsUrl;
 
   const discord = await fetch(discordUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      // Names and details are written by users. Nothing in them may ping
-      // anyone, so @everyone in a report's details is just text.
+      // Names, details and feedback are written by users. Nothing in them may
+      // ping anyone, so @everyone in a message is just text.
       allowed_mentions: { parse: [] },
       embeds: [
         {
-          title,
-          url: link,
-          color: RED,
-          timestamp: report.created_at,
-          fields: [
-            { name: "Reported", value: clip(subject) },
-            { name: "Reason", value: clip(report.reason), inline: true },
-            { name: "Reported by", value: clip(reporter), inline: true },
-            ...(report.details ? [{ name: "Details", value: clip(report.details) }] : []),
-            { name: "Open", value: link },
-          ],
+          ...message,
+          fields: message.fields.map((field) => ({ ...field, value: clip(field.value) })),
           footer: { text: `${table} · ${id}` },
         },
       ],
@@ -178,7 +238,7 @@ Deno.serve(async (req) => {
   });
 
   if (!discord.ok) {
-    console.error(`Discord refused the report message: ${discord.status}`, await discord.text());
+    console.error(`Discord refused the ${table} message: ${discord.status}`, await discord.text());
     return reply(502, { error: "Discord did not accept the message" });
   }
 
