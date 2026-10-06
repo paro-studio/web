@@ -34,6 +34,7 @@ describe("Privacy, terms and account deletion pages", () => {
 
     expect(screen.getByRole("heading", { name: "Terms of Use" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "What is not allowed" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Complaints and grievance officer" })).toBeInTheDocument();
     expect(screen.getByText("Nudity or sexually explicit images.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "privacy policy" })).toHaveAttribute("href", "/privacy");
   });

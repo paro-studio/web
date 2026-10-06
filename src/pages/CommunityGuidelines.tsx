@@ -107,6 +107,8 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     subtitle: "Paro is a place to explore and share AI-powered ideas.",
     items: [
       "Don't use AI to create content intended to harass, deceive, or harm others.",
+      "Don't post an AI image of a real person without their consent. Your own face is yours to post; someone else's is not.",
+      "Never post an image of a real person that is sexual, humiliating, or made to mislead people about what they said or did.",
       "Don't present generated information as fact when accuracy matters without verifying it.",
       "Be transparent when context makes it important to know that content was AI-generated.",
       "Don't use AI as an excuse to violate these guidelines.",

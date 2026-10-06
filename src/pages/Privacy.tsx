@@ -164,7 +164,11 @@ export default function Privacy() {
                 <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="text-gold underline underline-offset-4">
                   Discord
                 </a>
-                . To delete your account, see{" "}
+                . For a complaint, the{" "}
+                <Link to="/terms" className="text-gold underline underline-offset-4">
+                  terms of use
+                </Link>{" "}
+                name our grievance officer. To delete your account, see{" "}
                 <Link to="/delete-account" className="text-gold underline underline-offset-4">
                   how to delete your account
                 </Link>

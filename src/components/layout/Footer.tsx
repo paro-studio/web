@@ -97,6 +97,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-border mt-8 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-muted-foreground">
           <p>© {currentYear} Paro Studio. All rights reserved.</p>
+          <p>Every image on Paro is made or edited with AI.</p>
         </div>
       </div>
     </footer>

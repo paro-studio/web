@@ -4,7 +4,11 @@ import { Link } from "react-router-dom";
 import { ScrollText } from "lucide-react";
 import { DISCORD_URL, SUPPORT_EMAIL } from "./Privacy";
 
-export const TERMS_UPDATED = "3 October 2026";
+export const TERMS_UPDATED = "7 October 2026";
+
+// The named person complaints go to. Indian law requires a platform where
+// people post to publish one, with the response times stated on this page.
+const GRIEVANCE_OFFICER = "Akshat Patil";
 
 interface TermsSection {
   title: string;
@@ -23,6 +27,7 @@ const SECTIONS: TermsSection[] = [
     title: "The short version",
     paragraphs: [
       "Paro Studio is a public gallery of AI image prompts at parostudios.in, with an Android app. These terms cover both. \"We\" means the Paro Studio team.",
+      "Every image on Paro is made or edited with AI, and is posted by the people who use Paro, not by us.",
       "By signing in, posting or copying a prompt, you agree to these terms and to the Community Guidelines. If you do not agree, please do not use Paro.",
     ],
   },
@@ -48,6 +53,7 @@ const SECTIONS: TermsSection[] = [
       "By posting, you give Paro permission to store, show and share them on the website and in the app, for as long as they stay posted.",
       "Prompts are posted to be copied. Any signed in user can copy a prompt you post and use it to make their own images. Do not post a prompt you want to keep to yourself.",
       "Only post images you made, and prompts you wrote or have the right to share.",
+      "If an image shows a real person, that person must be you, or must have agreed to it being posted.",
       "Your posts, profile, likes, ratings and follows are public. The privacy policy explains what is public and what is not.",
     ],
   },
@@ -58,6 +64,7 @@ const SECTIONS: TermsSection[] = [
       "Nudity or sexually explicit images.",
       "Any sexual content involving minors. We report it and remove the account.",
       "Graphic or gory violence, threats, or encouragement of violence.",
+      "AI images of a real person without their consent, and any image of a real person that is sexual, humiliating or made to mislead.",
       "Harassment, bullying or hate towards a person or group.",
       "Someone else's work as your own, or anything that breaks copyright.",
       "Other people's private information.",
@@ -139,6 +146,32 @@ export default function Terms() {
                 )}
               </section>
             ))}
+
+            <section className="space-y-3">
+              <h2 className="text-xl sm:text-2xl font-serif text-foreground">Complaints and grievance officer</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                If you have a complaint about something posted on Paro, or about how Paro is run, write to our
+                grievance officer, as provided for under India's Information Technology Rules, 2021:
+              </p>
+              <ul className="list-disc pl-5 space-y-2 text-muted-foreground leading-relaxed">
+                <li>Name: {GRIEVANCE_OFFICER}</li>
+                <li>
+                  Email:{" "}
+                  <a href={`mailto:${SUPPORT_EMAIL}`} className={linkClass}>
+                    {SUPPORT_EMAIL}
+                  </a>
+                </li>
+              </ul>
+              <p className="text-muted-foreground leading-relaxed">
+                Include a link to the prompt or profile and say what is wrong. We acknowledge every complaint
+                within 24 hours and resolve it within 15 days.
+              </p>
+              <p className="text-muted-foreground leading-relaxed">
+                If an image shows you nude or in a sexual way, or is an AI image that impersonates you, tell us
+                and we act on it within 24 hours. You can also report any prompt or account from its menu, in
+                the app or on the website.
+              </p>
+            </section>
 
             <section className="space-y-3">
               <h2 className="text-xl sm:text-2xl font-serif text-foreground">Related pages and contact</h2>
