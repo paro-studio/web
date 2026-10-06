@@ -85,8 +85,22 @@ function sameSecret(given: string, expected: string) {
 const clip = (text: string, max = FIELD_MAX) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
+/**
+ * Text written by users, made safe to show. Discord renders markdown, so a
+ * title or a report's details could otherwise carry a masked link such as
+ * [Open in dashboard](https://somewhere.else) that looks like part of the
+ * alert to the person moderating.
+ */
+const plain = (text: string) => text.replace(/([\\\[\]()*_~`>|])/g, "\\$1");
+
+// Usernames are letters, digits and underscores, so only the underscore
+// needs care. A display name is free text.
 const handle = (profile: { username: string | null; full_name: string | null } | null) =>
-  profile?.username ? `@${profile.username}` : profile?.full_name || "someone without a username";
+  profile?.username
+    ? `@${plain(profile.username)}`
+    : profile?.full_name
+      ? plain(profile.full_name)
+      : "someone without a username";
 
 const promptUrl = (id: string) => `${SITE_URL}/prompt/${id}`;
 const profileUrl = (id: string) => `${SITE_URL}/profile/${id}`;
@@ -126,11 +140,13 @@ async function describe(admin: SupabaseClient, table: Table, id: string): Promis
       fields: [
         {
           name: "Reported",
-          value: prompt ? `"${prompt.title}" by ${handle(owner)}` : "A prompt that has since been deleted",
+          value: prompt
+            ? `"${plain(prompt.title)}" by ${handle(owner)}`
+            : "A prompt that has since been deleted",
         },
         { name: "Reason", value: data.reason, inline: true },
         { name: "Reported by", value: handle(await profileOf(admin, data.user_id)), inline: true },
-        ...(data.details ? [{ name: "Details", value: data.details }] : []),
+        ...(data.details ? [{ name: "Details", value: plain(data.details) }] : []),
         { name: "Open", value: link },
       ],
     };
@@ -154,7 +170,7 @@ async function describe(admin: SupabaseClient, table: Table, id: string): Promis
         { name: "Reported", value: handle(await profileOf(admin, data.reported_id)) },
         { name: "Reason", value: data.reason, inline: true },
         { name: "Reported by", value: handle(await profileOf(admin, data.user_id)), inline: true },
-        ...(data.details ? [{ name: "Details", value: data.details }] : []),
+        ...(data.details ? [{ name: "Details", value: plain(data.details) }] : []),
         { name: "Open", value: link },
       ],
     };
@@ -174,8 +190,8 @@ async function describe(admin: SupabaseClient, table: Table, id: string): Promis
     color: GOLD,
     timestamp: data.created_at,
     fields: [
-      { name: "Subject", value: data.subject || "(none)" },
-      { name: "Message", value: data.message || "(empty)" },
+      { name: "Subject", value: plain(data.subject || "(none)") },
+      { name: "Message", value: plain(data.message || "(empty)") },
       { name: "From", value: `${handle(await profileOf(admin, data.user_id))}\n${link}` },
     ],
   };
@@ -220,10 +236,7 @@ Deno.serve(async (req) => {
   const discordUrl =
     table === "feedback" ? Deno.env.get("DISCORD_FEEDBACK_WEBHOOK_URL") || reportsUrl : reportsUrl;
 
-  const discord = await fetch(discordUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const body = JSON.stringify({
       // Names, details and feedback are written by users. Nothing in them may
       // ping anyone, so @everyone in a message is just text.
       allowed_mentions: { parse: [] },
@@ -234,8 +247,20 @@ Deno.serve(async (req) => {
           footer: { text: `${table} · ${id}` },
         },
       ],
-    }),
   });
+
+  const send = () =>
+    fetch(discordUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+
+  // Discord takes about 30 messages a minute per webhook and answers 429
+  // past that, saying how long to wait. Wait once, within reason, so a burst
+  // does not cost a real report its alert.
+  let discord = await send();
+  if (discord.status === 429) {
+    const wait = Number((await discord.json().catch(() => ({})))?.retry_after ?? 1);
+    await new Promise((done) => setTimeout(done, Math.min(Math.max(wait, 0.5), 4) * 1000));
+    discord = await send();
+  }
 
   if (!discord.ok) {
     console.error(`Discord refused the ${table} message: ${discord.status}`, await discord.text());
