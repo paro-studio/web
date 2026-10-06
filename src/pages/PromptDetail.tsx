@@ -569,7 +569,9 @@ export default function PromptDetail() {
                     </div>
                   </div>
 
-                  {/* Interactive Star Selection */}
+                  {/* Interactive Star Selection. Not on your own prompt: the
+                      database refuses a rating from its creator. */}
+                  {user?.id !== prompt.creator.id && (
                   <div className="pt-2 flex items-center justify-between border-t border-border/40 flex-wrap gap-2">
                     <div className="text-xs text-muted-foreground">
                       {userRating ? (
@@ -603,6 +605,7 @@ export default function PromptDetail() {
                       })}
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* Tags */}

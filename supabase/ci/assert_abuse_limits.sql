@@ -253,4 +253,137 @@ begin
 end;
 $$;
 
+-- 20261007020000: honest counts and our own storage -------------------------------
+
+create or replace function auth.uid()
+returns uuid language sql stable
+as $$ select '11111111-1111-1111-1111-111111111111'::uuid $$;
+
+set local role authenticated;
+
+do $$
+declare
+  me    text := '11111111-1111-1111-1111-111111111111';
+  one   uuid := 'aaaaaaaa-0000-0000-0000-000000000001';
+  mine  uuid;
+  n     integer;
+begin
+  select id into mine from public.prompts where user_id = me::uuid limit 1;
+
+  -- No rating your own prompt, by insert or by the apps' upsert.
+  perform pg_temp.expect_error(format(
+    $f$insert into public.prompt_ratings (user_id, prompt_id, rating) values (%L, %L, 5)$f$, me, mine),
+    '23514', 'rating your own prompt');
+  perform pg_temp.expect_error(format(
+    $f$insert into public.prompt_ratings (user_id, prompt_id, rating) values (%L, %L, 5)
+       on conflict (user_id, prompt_id) do update set rating = excluded.rating$f$, me, mine),
+    '23514', 'rating your own prompt with an upsert');
+
+  -- Copying your own prompt does not count. Someone else's does.
+  perform public.increment_copy_count(mine);
+  select copy_count into n from public.prompts where id = mine;
+  if n <> 0 then
+    raise exception 'copying your own prompt must not count, copy_count is %', n;
+  end if;
+
+  perform public.increment_copy_count(one);
+  select copy_count into n from public.prompts where id = one;
+  if n <> 1 then
+    raise exception 'copying someone else''s prompt must count once, copy_count is %', n;
+  end if;
+end;
+$$;
+
+-- Signed out views: the caller's own x-forwarded-for entries are ignored.
+
+reset role;
+
+create or replace function auth.uid()
+returns uuid language sql stable
+as $$ select null::uuid $$;
+
+set local role anon;
+
+do $$
+declare
+  two uuid := 'aaaaaaaa-0000-0000-0000-000000000002';
+  n   integer;
+begin
+  -- Two made up addresses in front of the same real one are one visitor.
+  perform set_config('request.headers', '{"x-forwarded-for": "1.1.1.1, 203.0.113.9"}', true);
+  perform public.increment_view_count(two);
+  perform set_config('request.headers', '{"x-forwarded-for": "2.2.2.2, 203.0.113.9"}', true);
+  perform public.increment_view_count(two);
+
+  select view_count into n from public.prompts where id = two;
+  if n <> 1 then
+    raise exception 'a spoofed x-forwarded-for must not add views, view_count is %', n;
+  end if;
+
+  -- cf-connecting-ip wins over anything in x-forwarded-for.
+  perform set_config('request.headers',
+    '{"cf-connecting-ip": "198.51.100.7", "x-forwarded-for": "3.3.3.3, 203.0.113.50"}', true);
+  perform public.increment_view_count(two);
+  perform set_config('request.headers',
+    '{"cf-connecting-ip": "198.51.100.7", "x-forwarded-for": "4.4.4.4, 203.0.113.51"}', true);
+  perform public.increment_view_count(two);
+
+  select view_count into n from public.prompts where id = two;
+  if n <> 2 then
+    raise exception 'one real visitor behind cf-connecting-ip must count once, view_count is %', n;
+  end if;
+end;
+$$;
+
+-- Once the project's storage host is set, other hosts are refused.
+
+reset role;
+
+insert into public.app_config (key, value) values ('storage_host', 'ours.supabase.co');
+
+create or replace function auth.uid()
+returns uuid language sql stable
+as $$ select '11111111-1111-1111-1111-111111111111'::uuid $$;
+
+set local role authenticated;
+
+do $$
+declare
+  me   text := '11111111-1111-1111-1111-111111111111';
+  path text := '/storage/v1/object/public/';
+begin
+  perform pg_temp.expect_error(format(
+    $f$update public.prompts set image_url = %L where user_id = %L$f$,
+    'https://theirs.supabase.co' || path || 'prompt-images/' || me || '/x.jpg', me),
+    '23514', 'a prompt image on another project');
+  -- A dot in our host must not match any character.
+  perform pg_temp.expect_error(format(
+    $f$update public.prompts set image_url = %L where user_id = %L$f$,
+    'https://oursxsupabase.co' || path || 'prompt-images/' || me || '/x.jpg', me),
+    '23514', 'a prompt image on a lookalike host');
+  perform pg_temp.expect_error(format(
+    $f$update public.profiles set avatar_url = %L where id = %L$f$,
+    'https://theirs.supabase.co' || path || 'avatars/' || me || '/avatar.jpg', me),
+    '23514', 'an avatar on another project');
+  perform pg_temp.expect_error(format(
+    $f$update public.profiles set cover_url = %L where id = %L$f$,
+    'https://theirs.supabase.co' || path || 'banners/' || me || '/banner.jpg', me),
+    '23514', 'a banner on another project');
+
+  -- Our own host, and a Google photo from first sign in, still work.
+  update public.prompts
+     set image_url = 'https://ours.supabase.co' || path || 'prompt-images/' || me || '/x.jpg'
+   where user_id = me::uuid;
+  update public.profiles
+     set avatar_url = 'https://ours.supabase.co' || path || 'avatars/' || me || '/avatar.jpg?v=1',
+         cover_url  = 'https://ours.supabase.co' || path || 'banners/' || me || '/banner.jpg?v=1'
+   where id = me::uuid;
+  update public.profiles
+     set avatar_url = 'https://lh3.googleusercontent.com/a/photo'
+   where id = me::uuid;
+end;
+$$;
+
+reset role;
+
 rollback;
