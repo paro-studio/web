@@ -22,12 +22,16 @@
  * How the numbers were chosen:
  *
  * IMAGE
- *   sexual             remove 0.50. The rule is no nudity. A plain nude test
- *                      image scored 0.78; the first setting of 0.85 let it
- *                      through. Of the 68 prompts already posted, mostly
- *                      portraits and fashion, none reached 0.50.
- *   violence/graphic   remove 0.70. Gore and injury. Set above sexual because
- *                      horror and action art scores here too.
+ *   sexual             remove 0.50, review 0.10. The rule is no nudity. A
+ *                      plain nude test image scored 0.78; the first setting
+ *                      of 0.85 let it through. Across the 68 prompts already
+ *                      posted, mostly portraits and fashion, the highest
+ *                      score was 0.02, so anything at 0.10 is already far
+ *                      outside what people normally post and worth a look.
+ *   violence/graphic   remove 0.70, review 0.45. Gore and injury. Set above
+ *                      sexual because horror and action art scores here too:
+ *                      a comic book monster already posted scores 0.35 and
+ *                      is fine, so review starts above it.
  *   self-harm          remove 0.80, for all three kinds. Rare in a gallery,
  *                      serious when it is real.
  *   violence           never removes. A raised fist, a villain, a weapon in
@@ -63,9 +67,9 @@ export const POLICY: Record<"image" | "text", { remove: Limits; review: Limits }
       "self-harm/instructions": 0.8,
     },
     review: {
-      "sexual": 0.2,
+      "sexual": 0.1,
       "violence": 0.6,
-      "violence/graphic": 0.3,
+      "violence/graphic": 0.45,
       "self-harm": 0.3,
       "self-harm/intent": 0.3,
       "self-harm/instructions": 0.3,

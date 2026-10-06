@@ -25,8 +25,10 @@
  * different things for each: a prompt describing a battle is not a picture
  * of one.
  *
- * If the check itself fails (OpenAI is down, the key is wrong) nothing is
- * removed. A failed check must never take down an innocent post.
+ * If a check itself fails (OpenAI is down, the key is wrong, the image cannot
+ * be read) nothing is removed, because a failed check must never take down
+ * an innocent post. It is not waved through either: Discord is asked for a
+ * person to look.
  *
  * How it is called: by two triggers on public.prompts. They are not in a
  * migration, because they carry the shared secret; create them once in the
@@ -137,6 +139,43 @@ async function scoresFor(key: string, input: Record<string, unknown>, what: stri
   }
 }
 
+/**
+ * The image as OpenAI wants it when it is handed over rather than fetched:
+ * a data: address holding the bytes. Null if we cannot read it either.
+ */
+async function asDataUrl(imageUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) return null;
+    const type = response.headers.get("content-type") ?? "image/jpeg";
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    // In pieces: one call with millions of arguments overflows the stack.
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return `data:${type};base64,${btoa(binary)}`;
+  } catch (error) {
+    console.error("Could not read the image to hand it over", error);
+    return null;
+  }
+}
+
+/**
+ * The image's scores. OpenAI normally fetches the picture from its address,
+ * but sometimes cannot (a scan of the gallery found one such file), and an
+ * image that cannot be checked must not simply stay up unchecked. So on
+ * failure the bytes are read here and sent directly.
+ */
+async function imageScoresFor(key: string, imageUrl: string): Promise<Scores | null> {
+  const byAddress = await scoresFor(key, { type: "image_url", image_url: { url: imageUrl } }, "image");
+  if (byAddress) return byAddress;
+
+  const dataUrl = await asDataUrl(imageUrl);
+  if (!dataUrl) return null;
+  return scoresFor(key, { type: "image_url", image_url: { url: dataUrl } }, "image, sent directly");
+}
+
 const sameTags = (a?: string[] | null, b?: string[] | null) => (a ?? []).join("\n") === (b ?? []).join("\n");
 
 Deno.serve(async (req) => {
@@ -193,9 +232,7 @@ Deno.serve(async (req) => {
   const words = [prompt.title, (prompt.tags ?? []).join(", "), prompt.prompt ?? ""].join("\n").trim();
 
   const [imageScores, textScores] = await Promise.all([
-    imageChanged && ownImage
-      ? scoresFor(openAiKey, { type: "image_url", image_url: { url: prompt.image_url } }, "image")
-      : undefined,
+    imageChanged && ownImage ? imageScoresFor(openAiKey, prompt.image_url) : undefined,
     textChanged && words ? scoresFor(openAiKey, { type: "text", text: words }, "text") : undefined,
   ]);
 
@@ -206,12 +243,14 @@ Deno.serve(async (req) => {
   // null is a check that was due and failed; undefined is one that was not due.
   const failed = imageScores === null || textScores === null;
 
-  if (remove.length === 0 && review.length === 0) {
-    // A failed check removes nothing, and says so, so it shows in the log.
-    return failed
-      ? reply(502, { error: "A check could not be run. Nothing was removed." })
-      : reply(200, { ok: "clean" });
+  // A check that could not be run removes nothing, but it is not "clean"
+  // either: a person is asked to look, or an image OpenAI cannot read would
+  // be a way to post anything.
+  if (failed) {
+    review.push(`the ${imageScores === null ? "image" : "text"} could not be checked automatically`);
   }
+
+  if (remove.length === 0 && review.length === 0) return reply(200, { ok: "clean" });
 
   const { data: creator } = await admin
     .from("profiles")

@@ -95,6 +95,22 @@ async function scoresFor(input) {
   }
 }
 
+/**
+ * An image's scores. As in the live function: if OpenAI cannot fetch the
+ * picture from its address, read it here and send the bytes.
+ */
+async function imageScoresFor(imageUrl) {
+  try {
+    return await scoresFor({ type: 'image_url', image_url: { url: imageUrl } });
+  } catch (error) {
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw error;
+    const type = response.headers.get('content-type') ?? 'image/jpeg';
+    const base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
+    return scoresFor({ type: 'image_url', image_url: { url: `data:${type};base64,${base64}` } });
+  }
+}
+
 const prompts = await allPrompts();
 console.log(`Checking ${prompts.length} prompts: each image, and each title with its tags.`);
 console.log('Nothing is changed.\n');
@@ -115,7 +131,7 @@ for (const [index, prompt] of prompts.entries()) {
   process.stdout.write(`\r${index + 1}/${prompts.length}`);
   try {
     const words = [prompt.title, (prompt.tags ?? []).join(', ')].join('\n');
-    const imageScores = await scoresFor({ type: 'image_url', image_url: { url: prompt.image_url } });
+    const imageScores = await imageScoresFor(prompt.image_url);
     const textScores = await scoresFor({ type: 'text', text: words });
     record('image', imageScores, prompt);
     record('text', textScores, prompt);
