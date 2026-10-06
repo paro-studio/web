@@ -1,32 +1,41 @@
 /**
- * Check every prompt image already posted against the same rules the
- * moderate-prompt function applies to new ones.
+ * Check every prompt already posted against the same rules the
+ * moderate-prompt function applies to new ones, and show how the whole
+ * gallery scores, so the limits can be set from real posts and not guesses.
  *
- * moderate-prompt only runs when a prompt is posted or its image is replaced,
- * so everything posted before it existed has never been looked at. This walks
- * the whole gallery once and lists what it would have removed or sent for
- * review.
+ * moderate-prompt only runs when a prompt is posted or edited, so everything
+ * posted before it existed has never been looked at. This walks the gallery
+ * once and prints:
+ *
+ *   1. what would be removed, and what would be sent for a person to look at
+ *   2. for each category, the highest scoring prompts and how many sit over
+ *      each limit. That second part is how to tell whether a limit is right:
+ *      a remove line just above the highest innocent score catches the most
+ *      without touching anything that should stay.
  *
  * It changes nothing. It reads the public list of prompts with the anon key,
- * asks OpenAI's moderation model about each image, and prints the result.
- * Anything it flags is for a person to open and decide on.
+ * asks OpenAI's moderation model about each image and about each title with
+ * its tags, and prints. The prompt text itself is not checked here: the anon
+ * key cannot read it. The live function checks it for new posts.
  *
  *   OPENAI_API_KEY=... node scripts/scan-prompt-images.mjs
  *
- * The moderation endpoint is free to call. VITE_SUPABASE_URL and
- * VITE_SUPABASE_ANON_KEY are read from .env.local.
+ * The limits come from supabase/functions/moderate-prompt/policy.ts, the
+ * same file the function uses. The moderation endpoint is free to call.
+ * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are read from .env.local.
  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { judge, POLICY } from '../supabase/functions/moderate-prompt/policy.ts';
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE_URL = 'https://www.parostudios.in';
 const PAGE = 500;
-
-// Keep in step with supabase/functions/moderate-prompt/index.ts.
-const REMOVABLE = { 'sexual': 0.85, 'violence/graphic': 0.85, 'sexual/minors': 0.3 };
+/** How many of the highest scoring prompts to list per category. */
+const TOP = 3;
 
 function readEnv() {
   const values = {};
@@ -52,12 +61,13 @@ if (!openAiKey) {
 }
 
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+const percent = (score) => `${Math.round(score * 100)}%`.padStart(4);
 
 async function allPrompts() {
   const prompts = [];
   for (let from = 0; ; from += PAGE) {
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/prompts?select=id,title,image_url&order=created_at.asc`,
+      `${supabaseUrl}/rest/v1/prompts?select=id,title,tags,image_url&order=created_at.asc`,
       { headers: { apikey: anonKey, Range: `${from}-${from + PAGE - 1}` } },
     );
     if (!response.ok) throw new Error(`Could not list prompts: ${response.status} ${await response.text()}`);
@@ -67,16 +77,13 @@ async function allPrompts() {
   }
 }
 
-/** One image's result, waiting and trying again when OpenAI says to slow down. */
-async function check(imageUrl) {
+/** One input's scores, waiting and trying again when OpenAI says to slow down. */
+async function scoresFor(input) {
   for (let attempt = 1; ; attempt++) {
     const response = await fetch('https://api.openai.com/v1/moderations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openAiKey}` },
-      body: JSON.stringify({
-        model: 'omni-moderation-latest',
-        input: [{ type: 'image_url', image_url: { url: imageUrl } }],
-      }),
+      body: JSON.stringify({ model: 'omni-moderation-latest', input: [input] }),
     });
 
     if (response.status === 429 && attempt <= 5) {
@@ -84,36 +91,43 @@ async function check(imageUrl) {
       continue;
     }
     if (!response.ok) throw new Error(`${response.status} ${(await response.text()).slice(0, 200)}`);
-    return (await response.json()).results[0];
+    return (await response.json()).results[0].category_scores ?? {};
   }
 }
 
-const percent = (score) => `${Math.round(score * 100)}%`;
-
 const prompts = await allPrompts();
-console.log(`Checking ${prompts.length} prompt images. Nothing is changed.\n`);
+console.log(`Checking ${prompts.length} prompts: each image, and each title with its tags.`);
+console.log('Nothing is changed.\n');
 
 const remove = [];
 const review = [];
 const failed = [];
+// kind -> category -> [{ score, prompt }]
+const seen = { image: {}, text: {} };
+
+const record = (kind, scores, prompt) => {
+  for (const [category, score] of Object.entries(scores)) {
+    (seen[kind][category] ??= []).push({ score, prompt });
+  }
+};
 
 for (const [index, prompt] of prompts.entries()) {
   process.stdout.write(`\r${index + 1}/${prompts.length}`);
   try {
-    const result = await check(prompt.image_url);
-    const scores = result.category_scores ?? {};
-    const over = Object.entries(REMOVABLE).filter(([category, limit]) => (scores[category] ?? 0) >= limit);
-    const top = Object.entries(scores)
-      .filter(([category, score]) => result.categories?.[category] || score >= 0.5)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([category, score]) => `${category} ${percent(score)}`)
-      .join(', ');
+    const words = [prompt.title, (prompt.tags ?? []).join(', ')].join('\n');
+    const imageScores = await scoresFor({ type: 'image_url', image_url: { url: prompt.image_url } });
+    const textScores = await scoresFor({ type: 'text', text: words });
+    record('image', imageScores, prompt);
+    record('text', textScores, prompt);
 
-    if (over.length > 0) remove.push({ ...prompt, top });
-    else if (result.flagged) review.push({ ...prompt, top });
+    const image = judge('image', imageScores);
+    const text = judge('text', textScores);
+    const why = [...image.remove, ...text.remove, ...image.review, ...text.review].join(', ');
+
+    if (image.remove.length + text.remove.length > 0) remove.push({ ...prompt, why });
+    else if (image.review.length + text.review.length > 0) review.push({ ...prompt, why });
   } catch (error) {
-    failed.push({ ...prompt, top: String(error.message ?? error) });
+    failed.push({ ...prompt, why: String(error.message ?? error) });
   }
   // A small pause keeps a large gallery under OpenAI's per minute limit.
   await wait(250);
@@ -122,12 +136,41 @@ for (const [index, prompt] of prompts.entries()) {
 const list = (heading, rows) => {
   console.log(`\n${heading}: ${rows.length}`);
   for (const row of rows) {
-    console.log(`  "${row.title}"  ${row.top}\n    ${SITE_URL}/prompt/${row.id}`);
+    console.log(`  "${row.title}"  ${row.why}\n    ${SITE_URL}/prompt/${row.id}`);
   }
 };
 
-console.log('\n');
+console.log('\n\n=== WHAT THE CURRENT LIMITS WOULD DO ===');
 list('Would be removed automatically', remove);
-list('Flagged, needs a look', review);
+list('Would be sent for a look', review);
 if (failed.length > 0) list('Could not be checked', failed);
 console.log(`\nClean: ${prompts.length - remove.length - review.length - failed.length} of ${prompts.length}`);
+
+console.log('\n\n=== HOW THE GALLERY SCORES, BY CATEGORY ===');
+console.log('Highest scores first. "-" means no limit is set for that category.\n');
+
+for (const kind of ['image', 'text']) {
+  console.log(kind === 'image' ? 'IMAGES' : 'TITLES AND TAGS');
+  const categories = Object.entries(seen[kind])
+    .map(([category, rows]) => [category, rows.sort((a, b) => b.score - a.score)])
+    .sort((a, b) => b[1][0].score - a[1][0].score);
+
+  for (const [category, rows] of categories) {
+    const removeAt = POLICY[kind].remove[category];
+    const reviewAt = POLICY[kind].review[category];
+    const over = (limit) => (limit === undefined ? '-' : rows.filter((row) => row.score >= limit).length);
+    const limits =
+      `review at ${reviewAt === undefined ? '-' : percent(reviewAt).trim()} (${over(reviewAt)} over), ` +
+      `remove at ${removeAt === undefined ? '-' : percent(removeAt).trim()} (${over(removeAt)} over)`;
+
+    // A category nobody scores on is noise in the report.
+    if (rows[0].score < 0.01 && removeAt === undefined && reviewAt === undefined) continue;
+
+    console.log(`\n  ${category}   ${limits}`);
+    for (const row of rows.slice(0, TOP)) {
+      if (row.score < 0.01) break;
+      console.log(`    ${percent(row.score)}  "${row.prompt.title}"`);
+    }
+  }
+  console.log('');
+}

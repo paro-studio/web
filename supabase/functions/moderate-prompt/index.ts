@@ -1,6 +1,7 @@
 /**
- * moderate-prompt: checks a prompt's image for nudity, sexual content and
- * graphic violence as soon as it is posted or its image is replaced.
+ * moderate-prompt: checks a prompt's image and its words as soon as it is
+ * posted or edited, for nudity, sexual content, graphic violence, self-harm,
+ * and anything sexual involving minors.
  *
  * Why it exists: the Community Guidelines rule these out, but until now the
  * only thing enforcing them was another user noticing and reporting. A public
@@ -12,12 +13,17 @@
  *
  * What it does with the answer from OpenAI's moderation model:
  *
- *   - clearly over the line (a high score for sexual content or graphic
- *     violence, or anything sexual involving minors): the prompt and its
- *     image are removed, and a message says so in Discord
- *   - flagged but not clearly: the prompt stays up and Discord gets a
+ *   - over a "remove" line: the prompt and its image are removed, and a
+ *     message says so in Discord
+ *   - over a "review" line only: the prompt stays up and Discord gets a
  *     "needs a look" message with a link, for a person to decide
- *   - clean: nothing happens
+ *   - under both: nothing happens
+ *
+ * The lines themselves, one per category, for the image and for the text,
+ * are in policy.ts beside this file, with the reason for each number. The
+ * image and the text are checked separately, because the same category means
+ * different things for each: a prompt describing a battle is not a picture
+ * of one.
  *
  * If the check itself fails (OpenAI is down, the key is wrong) nothing is
  * removed. A failed check must never take down an innocent post.
@@ -49,9 +55,10 @@
  * supabase/config.toml) and the x-webhook-secret header must equal
  * REPORT_WEBHOOK_SECRET, the same secret notify-report uses.
  *
- * Only the image's address is taken from our own row, read back by id, and
- * only if it is in our own prompt-images bucket, so this cannot be pointed at
- * some other address.
+ * Everything checked is read back from our own row by id. The image is only
+ * sent if it is in our own prompt-images bucket, so this cannot be pointed at
+ * some other address. The prompt text goes to OpenAI for the check and
+ * nowhere else; it is never put in the Discord message.
  *
  * Secrets, set once with `supabase secrets set`, never committed:
  *
@@ -68,29 +75,16 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+import { judge } from "./policy.ts";
+
 const SITE_URL = "https://www.parostudios.in";
 const BUCKET = "prompt-images";
-
-/** At or above this score the image is removed without waiting for a person. */
-const REMOVE_AT = 0.85;
-/** Anything sexual involving minors is removed on far less. */
-const REMOVE_MINORS_AT = 0.3;
-
-/** The categories that can remove an image, with the score each needs. */
-const REMOVABLE: Record<string, number> = {
-  "sexual": REMOVE_AT,
-  "violence/graphic": REMOVE_AT,
-  "sexual/minors": REMOVE_MINORS_AT,
-};
 
 const RED = 0xb84a4a;
 const GOLD = 0xc9a45c;
 
-type Moderation = {
-  flagged: boolean;
-  categories: Record<string, boolean>;
-  category_scores: Record<string, number>;
-};
+type Scores = Record<string, number>;
+type Row = { id?: string; image_url?: string; title?: string; prompt?: string | null; tags?: string[] | null };
 
 function reply(status: number, body: Record<string, string>) {
   return new Response(JSON.stringify(body), {
@@ -112,8 +106,6 @@ function sameSecret(given: string, expected: string) {
 /** User text made safe for Discord, which would otherwise render its markdown. */
 const plain = (text: string) => text.replace(/([\\[\]()*_~`>|])/g, "\\$1");
 
-const percent = (score: number) => `${Math.round(score * 100)}%`;
-
 async function tellDiscord(embed: Record<string, unknown>) {
   const url = Deno.env.get("DISCORD_REPORTS_WEBHOOK_URL");
   if (!url) return;
@@ -124,6 +116,28 @@ async function tellDiscord(embed: Record<string, unknown>) {
   });
   if (!response.ok) console.error(`Discord refused the moderation message: ${response.status}`);
 }
+
+/** One input's scores from OpenAI, or null when the check could not be run. */
+async function scoresFor(key: string, input: Record<string, unknown>, what: string): Promise<Scores | null> {
+  try {
+    const response = await fetch("https://api.openai.com/v1/moderations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: "omni-moderation-latest", input: [input] }),
+    });
+    if (!response.ok) {
+      console.error(`The ${what} check failed: ${response.status}`, await response.text());
+      return null;
+    }
+    const result = ((await response.json()) as { results?: { category_scores?: Scores }[] }).results?.[0];
+    return result?.category_scores ?? null;
+  } catch (error) {
+    console.error(`The ${what} check could not be reached`, error);
+    return null;
+  }
+}
+
+const sameTags = (a?: string[] | null, b?: string[] | null) => (a ?? []).join("\n") === (b ?? []).join("\n");
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return reply(405, { error: "Use POST" });
@@ -139,12 +153,7 @@ Deno.serve(async (req) => {
     return reply(401, { error: "Not allowed" });
   }
 
-  let payload: {
-    type?: string;
-    table?: string;
-    record?: { id?: string; image_url?: string };
-    old_record?: { image_url?: string } | null;
-  };
+  let payload: { type?: string; table?: string; record?: Row; old_record?: Row | null };
   try {
     payload = await req.json();
   } catch {
@@ -155,10 +164,15 @@ Deno.serve(async (req) => {
   if (payload.table !== "prompts" || typeof id !== "string") {
     return reply(400, { error: "Expected a row from prompts" });
   }
-  // An edit that kept the same picture has nothing new to check.
-  if (payload.type === "UPDATE" && payload.old_record?.image_url === payload.record?.image_url) {
-    return reply(200, { ok: "unchanged" });
-  }
+
+  // A new prompt gets both checks. An edit only rechecks what it changed, so
+  // saving the form with nothing altered asks OpenAI nothing.
+  const before = payload.type === "UPDATE" ? payload.old_record : null;
+  const after = payload.record!;
+  const imageChanged = !before || before.image_url !== after.image_url;
+  const textChanged =
+    !before || before.title !== after.title || before.prompt !== after.prompt || !sameTags(before.tags, after.tags);
+  if (!imageChanged && !textChanged) return reply(200, { ok: "unchanged" });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -167,40 +181,37 @@ Deno.serve(async (req) => {
 
   const { data: prompt } = await admin
     .from("prompts")
-    .select("id, user_id, title, image_url")
+    .select("id, user_id, title, prompt, tags, image_url")
     .eq("id", id)
     .maybeSingle();
   if (!prompt) return reply(200, { ok: "gone" });
 
+  // Seed data and anything saved before links were restricted to our storage
+  // has an image elsewhere; that one is not ours to send.
   const ownPrefix = `${supabaseUrl}/storage/v1/object/public/${BUCKET}/`;
-  if (!prompt.image_url.startsWith(ownPrefix)) {
-    // Seed data and anything saved before links were restricted to our storage.
-    return reply(200, { ok: "not ours to check" });
+  const ownImage = prompt.image_url.startsWith(ownPrefix);
+  const words = [prompt.title, (prompt.tags ?? []).join(", "), prompt.prompt ?? ""].join("\n").trim();
+
+  const [imageScores, textScores] = await Promise.all([
+    imageChanged && ownImage
+      ? scoresFor(openAiKey, { type: "image_url", image_url: { url: prompt.image_url } }, "image")
+      : undefined,
+    textChanged && words ? scoresFor(openAiKey, { type: "text", text: words }, "text") : undefined,
+  ]);
+
+  const image = judge("image", imageScores ?? undefined);
+  const text = judge("text", textScores ?? undefined);
+  const remove = [...image.remove, ...text.remove];
+  const review = [...image.review, ...text.review];
+  // null is a check that was due and failed; undefined is one that was not due.
+  const failed = imageScores === null || textScores === null;
+
+  if (remove.length === 0 && review.length === 0) {
+    // A failed check removes nothing, and says so, so it shows in the log.
+    return failed
+      ? reply(502, { error: "A check could not be run. Nothing was removed." })
+      : reply(200, { ok: "clean" });
   }
-
-  const check = await fetch("https://api.openai.com/v1/moderations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${openAiKey}` },
-    body: JSON.stringify({
-      model: "omni-moderation-latest",
-      input: [{ type: "image_url", image_url: { url: prompt.image_url } }],
-    }),
-  });
-
-  if (!check.ok) {
-    console.error(`Moderation check failed for ${id}: ${check.status}`, await check.text());
-    return reply(502, { error: "The check could not be run. Nothing was removed." });
-  }
-
-  const result = ((await check.json()) as { results?: Moderation[] }).results?.[0];
-  if (!result) return reply(502, { error: "The check returned nothing. Nothing was removed." });
-
-  const scores = result.category_scores ?? {};
-  const over = Object.entries(REMOVABLE)
-    .filter(([category, limit]) => (scores[category] ?? 0) >= limit)
-    .map(([category]) => category);
-
-  if (over.length === 0 && !result.flagged) return reply(200, { ok: "clean" });
 
   const { data: creator } = await admin
     .from("profiles")
@@ -213,26 +224,19 @@ Deno.serve(async (req) => {
       ? plain(creator.full_name)
       : "someone without a username";
 
-  const flaggedList =
-    Object.entries(scores)
-      .filter(([category, score]) => result.categories?.[category] || over.includes(category) || score >= 0.5)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, score]) => `${category}: ${percent(score)}`)
-      .join("\n") || "flagged, no category given";
+  const link = `${SITE_URL}/prompt/${prompt.id}`;
+  const about = { name: "Prompt", value: `"${plain(prompt.title)}" by ${by}` };
+  const why = { name: "Why", value: [...remove, ...review].join("\n") };
+  const footer = { text: `prompts · ${prompt.id}` };
 
-  if (over.length === 0) {
+  if (remove.length === 0) {
     await tellDiscord({
       title: "A prompt needs a look",
-      url: `${SITE_URL}/prompt/${prompt.id}`,
+      url: link,
       color: GOLD,
-      description: "The automatic check flagged this image but not strongly enough to remove it.",
-      fields: [
-        { name: "Prompt", value: `"${plain(prompt.title)}" by ${by}` },
-        { name: "Scores", value: flaggedList },
-        { name: "Open", value: `${SITE_URL}/prompt/${prompt.id}` },
-      ],
-      footer: { text: `prompts · ${prompt.id}` },
+      description: "The automatic check noticed something, but not enough to remove it.",
+      fields: [about, why, { name: "Open", value: link }],
+      footer,
     });
     return reply(200, { ok: "sent for review" });
   }
@@ -244,32 +248,26 @@ Deno.serve(async (req) => {
     console.error(`Could not remove prompt ${prompt.id}`, deleteError);
     await tellDiscord({
       title: "A prompt should be removed, and could not be",
-      url: `${SITE_URL}/prompt/${prompt.id}`,
+      url: link,
       color: RED,
-      fields: [
-        { name: "Prompt", value: `"${plain(prompt.title)}" by ${by}` },
-        { name: "Scores", value: flaggedList },
-        { name: "Open", value: `${SITE_URL}/prompt/${prompt.id}` },
-      ],
-      footer: { text: `prompts · ${prompt.id}` },
+      fields: [about, why, { name: "Open", value: link }],
+      footer,
     });
     return reply(500, { error: "Could not remove the prompt" });
   }
 
-  const path = prompt.image_url.slice(ownPrefix.length).split("?")[0];
-  const { error: fileError } = await admin.storage.from(BUCKET).remove([path]);
-  if (fileError) console.error(`Removed prompt ${prompt.id} but not its file ${path}`, fileError);
+  if (ownImage) {
+    const path = prompt.image_url.slice(ownPrefix.length).split("?")[0];
+    const { error: fileError } = await admin.storage.from(BUCKET).remove([path]);
+    if (fileError) console.error(`Removed prompt ${prompt.id} but not its file ${path}`, fileError);
+  }
 
   await tellDiscord({
     title: "A prompt was removed automatically",
     color: RED,
-    description: "Its image scored over the limit for content the Community Guidelines rule out.",
-    fields: [
-      { name: "Prompt", value: `"${plain(prompt.title)}" by ${by}` },
-      { name: "Scores", value: flaggedList },
-      { name: "Creator", value: `${SITE_URL}/profile/${prompt.user_id}` },
-    ],
-    footer: { text: `prompts · ${prompt.id}` },
+    description: "It scored over a limit for content the Community Guidelines rule out.",
+    fields: [about, why, { name: "Creator", value: `${SITE_URL}/profile/${prompt.user_id}` }],
+    footer,
   });
 
   return reply(200, { ok: "removed" });
