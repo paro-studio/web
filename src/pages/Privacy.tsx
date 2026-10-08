@@ -65,6 +65,7 @@ const SECTIONS: PolicySection[] = [
     title: "How we use it",
     paragraphs: [
       "To run Paro: to sign you in, show your profile and prompts, count views and copies, keep to the daily posting limit, and look into reports.",
+      "To keep Paro safe: every new prompt's image, title, prompt text and tags are checked automatically for content that breaks the community guidelines. A prompt that fails the check is removed, and one that is unclear is looked at by the Paro team.",
       "If notifications are on, to tell you about a new follower, a like on your prompt, or a new prompt from someone you follow. Nothing else is sent, and you can turn them off in Settings at any time.",
       "Crash reports are used only to find and fix problems in the app.",
       "We do not sell your data, show ads, or track you across other apps and websites.",
@@ -78,6 +79,8 @@ const SECTIONS: PolicySection[] = [
       "Vercel hosts the website.",
       "Sentry receives the app's crash and error reports.",
       "Expo and Google deliver the app's notifications to your phone.",
+      "OpenAI runs the automatic check on new prompts. It receives the image, title, prompt text and tags, not your name or email.",
+      "Discord carries reports, feedback and flagged prompts to the Paro team's private channel, with the usernames involved.",
     ],
     paragraphs: ["They process data only to provide those services to us."],
   },
