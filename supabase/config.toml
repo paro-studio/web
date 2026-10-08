@@ -42,3 +42,8 @@ verify_jwt = false
 # Called by database triggers, like notify-report, and checks the same shared
 # secret in the x-webhook-secret header.
 verify_jwt = false
+
+[functions.send-push]
+# Called by database triggers and by moderate-prompt, and checks the same
+# shared secret in the x-webhook-secret header.
+verify_jwt = false

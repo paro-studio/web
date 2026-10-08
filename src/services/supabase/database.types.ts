@@ -529,6 +529,14 @@ export type Database = {
       increment_view_count: { Args: { prompt_id: string }; Returns: undefined }
       prompt_counter_actor: { Args: never; Returns: string }
       prompt_image_quota_ok: { Args: never; Returns: boolean }
+      register_push_token: {
+        Args: { device_platform: string; push_token: string }
+        Returns: undefined
+      }
+      unregister_push_token: {
+        Args: { push_token: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

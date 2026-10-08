@@ -176,6 +176,26 @@ async function imageScoresFor(key: string, imageUrl: string): Promise<Scores | n
   return scoresFor(key, { type: "image_url", image_url: { url: dataUrl } }, "image, sent directly");
 }
 
+/**
+ * Tells the creator's followers about a new prompt, by handing it to the
+ * send-push function. Done from here, after the check, and not by a trigger
+ * on the table: a post that is about to be removed should not buzz anyone.
+ * A failure is logged and otherwise ignored; a missed notification must not
+ * make the moderation result look like an error.
+ */
+async function announce(supabaseUrl: string, secret: string, promptId: string) {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-webhook-secret": secret },
+      body: JSON.stringify({ type: "INSERT", table: "prompts", record: { id: promptId } }),
+    });
+    if (!response.ok) console.error(`send-push answered ${response.status} for prompt ${promptId}`);
+  } catch (error) {
+    console.error(`Could not reach send-push for prompt ${promptId}`, error);
+  }
+}
+
 const sameTags = (a?: string[] | null, b?: string[] | null) => (a ?? []).join("\n") === (b ?? []).join("\n");
 
 Deno.serve(async (req) => {
@@ -249,6 +269,10 @@ Deno.serve(async (req) => {
   if (failed) {
     review.push(`the ${imageScores === null ? "image" : "text"} could not be checked automatically`);
   }
+
+  // The prompt is staying up, so followers can hear about it. New posts only:
+  // an edit is not news.
+  if (remove.length === 0 && payload.type === "INSERT") await announce(supabaseUrl, secret, prompt.id);
 
   if (remove.length === 0 && review.length === 0) return reply(200, { ok: "clean" });
 
