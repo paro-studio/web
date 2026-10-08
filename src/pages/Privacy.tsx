@@ -7,7 +7,7 @@ import { Lock } from "lucide-react";
 export const DISCORD_URL = "https://discord.com/invite/zNZ3TAwy73";
 export const SUPPORT_EMAIL = "parostudio2026@gmail.com";
 
-export const PRIVACY_UPDATED = "3 October 2026";
+export const PRIVACY_UPDATED = "9 October 2026";
 
 interface PolicySection {
   title: string;
@@ -37,6 +37,7 @@ const SECTIONS: PolicySection[] = [
       "What you do: the prompts you like, save and rate, the people you follow, the accounts you block, and the prompts or accounts you report or feedback you send.",
       "What you type into search, sent so the search can run. It is not saved on our side.",
       "Counts of views and copies. When you are signed out, a view is counted against a one way hash of your IP address, never the address itself. When you are signed in, it is counted against your account. These records are deleted after two days.",
+      "If you turn on notifications in the app: an address for your phone, called a push token, so a notification can reach it. It is tied to your account, and removed when you turn notifications off, sign out or delete your account.",
       "Crash and error reports from the app: what went wrong and where in the code, your phone's model and Android version, and the last few screens you opened. Never your email or anything you posted.",
     ],
   },
@@ -64,6 +65,7 @@ const SECTIONS: PolicySection[] = [
     title: "How we use it",
     paragraphs: [
       "To run Paro: to sign you in, show your profile and prompts, count views and copies, keep to the daily posting limit, and look into reports.",
+      "If notifications are on, to tell you about a new follower, a like on your prompt, or a new prompt from someone you follow. Nothing else is sent, and you can turn them off in Settings at any time.",
       "Crash reports are used only to find and fix problems in the app.",
       "We do not sell your data, show ads, or track you across other apps and websites.",
     ],
@@ -75,6 +77,7 @@ const SECTIONS: PolicySection[] = [
       "Google handles sign in.",
       "Vercel hosts the website.",
       "Sentry receives the app's crash and error reports.",
+      "Expo and Google deliver the app's notifications to your phone.",
     ],
     paragraphs: ["They process data only to provide those services to us."],
   },
