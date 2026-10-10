@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from "react";
-import { X, Upload, TrendingUp } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Upload, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AI_TOOLS, FEATURED_AI_TOOL } from "@/lib/aiTools";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ export function EditPromptModal({
   const [imagePreview, setImagePreview] = useState(prompt.image_url);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const objectUrlRef = useRef<string | null>(null);
 
   // Lists never load the prompt text, so fetch it for the owner to edit. Save
   // stays disabled until it arrives, so a slow load cannot wipe the prompt.
@@ -91,12 +92,61 @@ export function EditPromptModal({
     }
   }, [prompt.tool_used]);
 
+  // Revoke object URL on unmount or when preview changes
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+      setImageFile(null);
+      setImagePreview(prompt.image_url);
+      setTitle(prompt.title);
+      setPromptText(prompt.prompt_text);
+      setSelectedTags(prompt.tags);
+      setIsSubmitting(false);
+    }
+  }, [isOpen, prompt]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
     }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be smaller than 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    objectUrlRef.current = objectUrl;
+    setImageFile(file);
+    setImagePreview(objectUrl);
   };
 
   const toggleTag = (tag: string) => {
