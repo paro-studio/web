@@ -268,4 +268,24 @@ describe("EditPromptModal", () => {
     await waitFor(() => expect(updatePrompt).toHaveBeenCalled());
     expect(toast).toHaveBeenCalledWith({ title: "Prompt updated successfully" });
   });
+
+  it("allows saving a legacy title exceeding 100 characters if unchanged", async () => {
+    const legacyLongTitle = {
+      ...prompt,
+      title: "t".repeat(120),
+    };
+    render(
+      <EditPromptModal
+        isOpen
+        onClose={onClose}
+        onUpdated={onUpdated}
+        prompt={legacyLongTitle}
+      />,
+    );
+
+    save();
+
+    await waitFor(() => expect(updatePrompt).toHaveBeenCalled());
+    expect(toast).toHaveBeenCalledWith({ title: "Prompt updated successfully" });
+  });
 });

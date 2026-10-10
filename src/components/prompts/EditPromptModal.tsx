@@ -123,7 +123,7 @@ export function EditPromptModal({
       return;
     }
 
-    if (title.length > 100) {
+    if (title !== prompt.title && title.length > 100) {
       toast({
         title: "Title too long",
         description: "Please keep your title under 100 characters",
