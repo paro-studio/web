@@ -35,36 +35,28 @@ describe("Navbar Dropdown Menus", () => {
     expect(avatars.length).toBeGreaterThan(0);
   });
 
-  it("renders Earn With PARO link with hover text contrast classes in desktop dropdown", async () => {
+  // The desktop menu is only about your account. Create and GitHub are
+  // already in the navbar, and the site links moved to the footer.
+  it("keeps the desktop dropdown to account items, headed by who is signed in", () => {
     render(
       <MemoryRouter>
         <Navbar />
       </MemoryRouter>
     );
 
-    // Open desktop dropdown (first avatar trigger)
-    const avatarButtons = screen.getAllByRole("button").filter(
-      (btn) => btn.querySelector("span")?.textContent?.includes("T") || btn.className.includes("rounded-full")
-    );
-    
-    fireEvent.pointerDown(avatarButtons[0], { button: 0, ctrlKey: false });
-    fireEvent.keyDown(avatarButtons[0], { key: "ArrowDown" });
+    const desktopTrigger = screen.getAllByRole("button").filter((btn) => btn.className.includes("rounded-full"))[0];
+    fireEvent.pointerDown(desktopTrigger, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(desktopTrigger, { key: "ArrowDown" });
 
-    // Check Earn With PARO links rendered (DropdownMenuItem with asChild places role="menuitem" directly on the Link)
-    const earnLinks = screen.getAllByRole("menuitem").filter(item => item.getAttribute("href") === "/earn");
-    expect(earnLinks.length).toBeGreaterThan(0);
-
-    const earnLink = earnLinks[0] as HTMLElement;
-    expect(earnLink.className).toContain("group");
-    expect(earnLink.className).toContain("text-gold");
-
-    const icon = earnLink.querySelector("svg");
-    expect(icon?.getAttribute("class")).toContain("group-hover:text-black");
-    expect(icon?.getAttribute("class")).toContain("group-focus:text-black");
-
-    const span = earnLink.querySelector("span");
-    expect(span?.className).toContain("group-hover:text-black");
-    expect(span?.className).toContain("group-focus:text-black");
+    const items = screen.getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      "TTest User@testuser",
+      "Saved",
+      "Liked",
+      "Settings",
+      "Log out",
+    ]);
+    expect(items[0]).toHaveAttribute("href", "/profile/profile-123");
   });
 
   it("renders PARO Originals and Earn With PARO links with hover text contrast classes in mobile dropdown", async () => {
@@ -112,7 +104,29 @@ describe("Navbar Dropdown Menus", () => {
     expect(earnSpan?.className).toContain("group-focus:text-black");
   });
 
-  it("renders Support link pointing to support@parostudios.in in mobile dropdown", async () => {
+  // Settings is where account deletion lives, so it has to be reachable from
+  // both menus, not only through the Edit Profile button.
+  it("links to Settings from the desktop and mobile dropdowns", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    const desktopTrigger = screen.getAllByRole("button").filter((btn) => btn.className.includes("rounded-full"))[0];
+    fireEvent.pointerDown(desktopTrigger, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(desktopTrigger, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    const mobileSection = container.querySelector(".flex.lg\\:hidden");
+    const mobileAvatarButton = mobileSection?.querySelectorAll("button")[1];
+    fireEvent.pointerDown(mobileAvatarButton!, { button: 0, ctrlKey: false });
+    fireEvent.keyDown(mobileAvatarButton!, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("renders Support link pointing to parostudio2026@gmail.com in mobile dropdown", async () => {
     const { container } = render(
       <MemoryRouter>
         <Navbar />
@@ -128,6 +142,6 @@ describe("Navbar Dropdown Menus", () => {
 
     const supportLink = screen.getByRole("menuitem", { name: /support/i });
     expect(supportLink).toBeDefined();
-    expect(supportLink.getAttribute("href")).toBe("mailto:support@parostudios.in");
+    expect(supportLink.getAttribute("href")).toBe("mailto:parostudio2026@gmail.com");
   });
 });

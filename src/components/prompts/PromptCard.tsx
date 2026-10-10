@@ -1,7 +1,9 @@
 import { useSocialMutation } from "@/hooks/useSocialMutation";
 import { copyPromptText } from "@/lib/copyPromptText";
+import { RatingInvitation } from "@/components/prompts/RatingInvitation";
+import { useCopyRatingInvitation } from "@/hooks/useCopyRatingInvitation";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, Copy, Heart, Bookmark, Check, Pencil, Trash2, Share2, MoreHorizontal, Link as LinkIcon, UserCircle, Flag, MoreVertical, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +29,15 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PromptCardProps {
   id: string;
@@ -96,6 +107,8 @@ export function PromptCard({
   const [shareOpen, setShareOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const ratingInvitation = useCopyRatingInvitation(id, user?.id);
   const likeMutation = useSocialMutation("like", user?.id, id, onLikeChange);
   const saveMutation = useSocialMutation("save", user?.id, id, onSaveChange);
   const localLiked = likeMutation.pending?.active ?? isLiked;
@@ -118,6 +131,15 @@ export function PromptCard({
     toast({ title: "Sign in required", description: `Please sign in to ${action}` });
   };
 
+  const openRating = () => {
+    if (!user) {
+      if (onLoginRequired) onLoginRequired();
+      else toast({ title: "Sign in required", description: "Please sign in to rate prompts" });
+      return;
+    }
+    navigate(`/prompt/${id}#accuracy-rating`);
+  };
+
   const handleCopy = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -138,6 +160,7 @@ export function PromptCard({
       return;
     }
     setCopied(true);
+    void ratingInvitation.afterCopy();
 
     // Increment copy count in Supabase
     const { incrementCopyCount } = await import('@/services/supabase/prompts');
@@ -247,10 +270,10 @@ export function PromptCard({
           <Drawer open={mobileMenuOpen} onOpenChange={setMobileMenuOpen} dismissible={true}>
             <DrawerTrigger asChild>
               <button
-                className="p-1.5"
+                className="p-1.5 rounded-full bg-background/80 hover:bg-background/90 text-foreground backdrop-blur-sm border border-border/50 shadow-sm transition-colors"
                 aria-label="More options"
               >
-                <MoreVertical className="h-5 w-5 text-black drop-shadow-md" />
+                <MoreVertical className="h-4 w-4" />
               </button>
             </DrawerTrigger>
           
@@ -476,7 +499,15 @@ export function PromptCard({
             </DropdownMenuTrigger>
             
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleShare}>
+              {/* No preventDefault on items that open a dialog: Radix keeps the
+                  menu open when the click is default prevented, which leaves
+                  it behind the dialog and loses focus when the dialog closes. */}
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShareOpen(true);
+                }}
+              >
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </DropdownMenuItem>
@@ -509,7 +540,6 @@ export function PromptCard({
               {isOwner ? (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     setShowDeleteDialog(true);
                   }}
@@ -521,7 +551,6 @@ export function PromptCard({
               ) : (
                 <DropdownMenuItem
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     if (!user) {
                       onLoginRequired?.();
@@ -598,25 +627,29 @@ export function PromptCard({
             <span className="tabular-nums">{(localLikeCount ?? 0).toLocaleString()}</span>
           </span>
           {hasRatings ? (
-            <span
+            <button type="button" onClick={openRating}
               className="flex items-center gap-0.5 sm:gap-1 text-gold font-medium"
               title={`Prompt Accuracy: ${accuracyRating.toFixed(1)} / 5.0 (${ratingCount} rating${ratingCount === 1 ? '' : 's'})`}
               aria-label={`Prompt Accuracy: ${accuracyRating.toFixed(1)} out of 5 stars`}
             >
               <Star className="h-3 w-3 fill-gold text-gold" />
               <span className="tabular-nums">{accuracyRating.toFixed(1)}</span>
-            </span>
+            </button>
           ) : (
-            <span
+            <button type="button" onClick={openRating}
               className="flex items-center gap-0.5 sm:gap-1 text-muted-foreground"
               title="Not yet rated"
               aria-label="Not yet rated"
             >
               <Star className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[11px] sm:text-xs">Not rated</span>
-            </span>
+              <span className="text-xs">Not rated</span>
+            </button>
           )}
         </div>
+        {ratingInvitation.visible && <RatingInvitation onRate={() => {
+          ratingInvitation.dismiss();
+          openRating();
+        }} onDismiss={ratingInvitation.dismiss} />}
       </div>
 
       <SharePromptDialog
@@ -635,32 +668,35 @@ export function PromptCard({
       />
 
       {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowDeleteDialog(false)}>
-          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">Delete Prompt?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+      <Dialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Prompt?</DialogTitle>
+            <DialogDescription>
               This will permanently delete this prompt and its image. This cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowDeleteDialog(false)}
-                disabled={isDeleting}
-                className="px-4 py-2 text-sm border border-border rounded-sm hover:bg-secondary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 text-sm bg-destructive text-destructive-foreground rounded-sm hover:bg-destructive/90 transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

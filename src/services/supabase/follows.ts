@@ -28,22 +28,25 @@ export async function isFollowing(followerId: string, followingId: string): Prom
  * Get follower count for a user
  */
 export async function getFollowerCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('following_id', userId);
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('follower_count')
+    .eq('id', userId)
+    .maybeSingle();
 
   if (error) {
     console.error('Error getting follower count:', error);
     return 0;
   }
 
-  return count || 0;
+  return data?.follower_count ?? 0;
 }
 
 /**
  * Follower counts for many users in one query.
  *
+ * Reads denormalized `follower_count` directly from `profiles`, transferring only
+ * one row per requested user ID regardless of total follower volume.
  * Users with no followers are absent from the map — read with `?? 0`.
  */
 export async function getFollowerCounts(userIds: string[]): Promise<Map<string, number>> {
@@ -51,9 +54,9 @@ export async function getFollowerCounts(userIds: string[]): Promise<Map<string, 
   if (unique.length === 0) return new Map();
 
   const { data, error } = await supabase
-    .from('follows')
-    .select('following_id')
-    .in('following_id', unique);
+    .from('profiles')
+    .select('id, follower_count')
+    .in('id', unique);
 
   if (error) {
     console.error('Error getting follower counts:', error);
@@ -61,8 +64,8 @@ export async function getFollowerCounts(userIds: string[]): Promise<Map<string, 
   }
 
   const counts = new Map<string, number>();
-  for (const { following_id } of data ?? []) {
-    counts.set(following_id, (counts.get(following_id) ?? 0) + 1);
+  for (const { id, follower_count } of data ?? []) {
+    counts.set(id, follower_count ?? 0);
   }
   return counts;
 }
@@ -71,17 +74,18 @@ export async function getFollowerCounts(userIds: string[]): Promise<Map<string, 
  * Get following count for a user
  */
 export async function getFollowingCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('follower_id', userId);
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('following_count')
+    .eq('id', userId)
+    .maybeSingle();
 
   if (error) {
     console.error('Error getting following count:', error);
     return 0;
   }
 
-  return count || 0;
+  return data?.following_count ?? 0;
 }
 
 /** Set the requested follow state without depending on a possibly stale read. */

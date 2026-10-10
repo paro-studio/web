@@ -1,7 +1,9 @@
 import { useSocialMutation } from "@/hooks/useSocialMutation";
+import { RatingInvitation } from "@/components/prompts/RatingInvitation";
+import { useCopyRatingInvitation } from "@/hooks/useCopyRatingInvitation";
 
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +33,8 @@ export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const location = useLocation();
+  const ratingInvitation = useCopyRatingInvitation(id, user?.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [shareOpen, setShareOpen] = useState(false);
@@ -211,6 +215,21 @@ export default function PromptDetail() {
     enabled: !!prompt?.tags && prompt.tags.length > 0,
   });
 
+  const focusRating = () => {
+    const section = document.getElementById("accuracy-rating");
+    section?.scrollIntoView({ block: "center" });
+    section?.focus({ preventScroll: true });
+    ratingInvitation.dismiss();
+  };
+  const loadedPromptId = prompt?.id;
+  useEffect(() => {
+    if (loadedPromptId && location.hash === "#accuracy-rating") {
+      const section = document.getElementById("accuracy-rating");
+      section?.scrollIntoView({ block: "center" });
+      section?.focus({ preventScroll: true });
+    }
+  }, [loadedPromptId, location.hash]);
+
   const handleCopy = async () => {
     if (!prompt) return;
 
@@ -230,6 +249,7 @@ export default function PromptDetail() {
       return;
     }
     setCopied(true);
+    void ratingInvitation.afterCopy();
 
     await incrementCopyCount(prompt.id);
     // Pull the new count back so the displayed number actually moves
@@ -288,6 +308,7 @@ export default function PromptDetail() {
       queryClient.setQueryData(["prompt", id, user.id], (current: typeof prompt) => current ? {
         ...current, userRating: rating, accuracyRating: ratingInfo.average, ratingCount: ratingInfo.count,
       } : current);
+      ratingInvitation.dismiss();
       toast({
         title: "Rating recorded",
         description: `Thank you! You rated this prompt's accuracy ${rating} / 5 stars.`,
@@ -429,7 +450,7 @@ export default function PromptDetail() {
                     >
                       <Star className="h-3 sm:h-3.5 w-3 sm:w-3.5 fill-gold text-gold" />
                       <span className="tabular-nums">{accuracyRating.toFixed(1)}</span>
-                      <span className="text-muted-foreground text-[11px]">({ratingCount})</span>
+                      <span className="text-muted-foreground text-xs">({ratingCount})</span>
                     </span>
                   ) : (
                     <span
@@ -437,7 +458,7 @@ export default function PromptDetail() {
                       title="Not yet rated"
                     >
                       <Star className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground/50" />
-                      <span className="text-[11px]">Not rated</span>
+                      <span className="text-xs">Not rated</span>
                     </span>
                   )}
                   <span className="text-xs px-2 py-0.5 bg-secondary rounded-sm">
@@ -507,8 +528,10 @@ export default function PromptDetail() {
                   </Button>
                 </div>
 
+                {ratingInvitation.visible && <RatingInvitation onRate={focusRating} onDismiss={ratingInvitation.dismiss} />}
+
                 {/* Accuracy Rating Interactive Widget */}
-                <div className="rounded-xl border border-border/80 bg-secondary/30 p-3 sm:p-3.5 space-y-2.5">
+                <div id="accuracy-rating" tabIndex={-1} className="rounded-xl border border-border/80 bg-secondary/30 p-3 sm:p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-full bg-gold/10 text-gold border border-gold/20 flex-shrink-0">
@@ -516,7 +539,7 @@ export default function PromptDetail() {
                       </div>
                       <div>
                         <h4 className="text-xs sm:text-sm font-semibold leading-none text-foreground">Prompt Accuracy Rating</h4>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           How consistently this prompt delivers the expected result
                         </p>
                       </div>
@@ -529,7 +552,7 @@ export default function PromptDetail() {
                             <span>{accuracyRating.toFixed(1)}</span>
                             <span className="text-xs text-muted-foreground font-normal">/ 5.0</span>
                           </div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             {ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'}
                           </div>
                         </>
@@ -538,7 +561,7 @@ export default function PromptDetail() {
                           <div className="text-xs sm:text-sm font-medium text-muted-foreground flex items-center gap-1 justify-end">
                             <span>Not yet rated</span>
                           </div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             Be the first to rate
                           </div>
                         </>
@@ -546,7 +569,9 @@ export default function PromptDetail() {
                     </div>
                   </div>
 
-                  {/* Interactive Star Selection */}
+                  {/* Interactive Star Selection. Not on your own prompt: the
+                      database refuses a rating from its creator. */}
+                  {user?.id !== prompt.creator.id && (
                   <div className="pt-2 flex items-center justify-between border-t border-border/40 flex-wrap gap-2">
                     <div className="text-xs text-muted-foreground">
                       {userRating ? (
@@ -580,6 +605,7 @@ export default function PromptDetail() {
                       })}
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* Tags */}

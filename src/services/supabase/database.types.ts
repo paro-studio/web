@@ -39,6 +39,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blocks_blocked_id_fkey"
+            columns: ["blocked_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blocks_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feedback: {
         Row: {
           created_at: string
@@ -149,6 +185,8 @@ export type Database = {
           bio: string | null
           cover_url: string | null
           created_at: string | null
+          follower_count: number
+          following_count: number
           full_name: string | null
           id: string
           updated_at: string | null
@@ -161,6 +199,8 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          follower_count?: number
+          following_count?: number
           full_name?: string | null
           id: string
           updated_at?: string | null
@@ -173,6 +213,8 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          follower_count?: number
+          following_count?: number
           full_name?: string | null
           id?: string
           updated_at?: string | null
@@ -336,9 +378,13 @@ export type Database = {
           ai_tool: string
           copy_count: number
           created_at: string
+          fts: unknown | null
           id: string
           image_url: string
+          like_count: number
           prompt: string
+          rating_average: number | null
+          rating_count: number
           tags: string[] | null
           title: string
           updated_at: string
@@ -351,7 +397,10 @@ export type Database = {
           created_at?: string
           id?: string
           image_url: string
+          like_count?: number
           prompt: string
+          rating_average?: number | null
+          rating_count?: number
           tags?: string[] | null
           title: string
           updated_at?: string
@@ -364,7 +413,10 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string
+          like_count?: number
           prompt?: string
+          rating_average?: number | null
+          rating_count?: number
           tags?: string[] | null
           title?: string
           updated_at?: string
@@ -417,6 +469,48 @@ export type Database = {
           },
         ]
       }
+      user_reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reported_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reported_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reported_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_reports_reported_id_fkey"
+            columns: ["reported_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -435,6 +529,14 @@ export type Database = {
       increment_view_count: { Args: { prompt_id: string }; Returns: undefined }
       prompt_counter_actor: { Args: never; Returns: string }
       prompt_image_quota_ok: { Args: never; Returns: boolean }
+      register_push_token: {
+        Args: { device_platform: string; push_token: string }
+        Returns: undefined
+      }
+      unregister_push_token: {
+        Args: { push_token: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

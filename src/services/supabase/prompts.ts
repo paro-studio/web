@@ -96,6 +96,9 @@ export interface Prompt {
   image_url: string;
   ai_tool: string;
   tags?: string[];
+  view_count?: number;
+  copy_count?: number;
+  like_count?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -160,7 +163,7 @@ export async function createPrompt(data: CreatePromptData) {
  * `prompts.prompt` at all, so a signed out `select('*')` on prompts fails
  * outright. List columns and leave `prompt` out.
  */
-const PROMPT_COLUMNS =
+export const PROMPT_COLUMNS =
   'id, user_id, title, image_url, ai_tool, tags, created_at, updated_at, view_count, copy_count' as const;
 
 type PromptListRow = {
@@ -274,6 +277,66 @@ export async function getPromptText(id: string): Promise<{ text: string | null; 
   }
 
   return { text: data?.prompt ?? null, error: null };
+}
+
+export interface SearchPromptsOptions {
+  query?: string;
+  tags?: string[];
+  limit?: number;
+}
+
+/**
+ * Search prompts using database full-text search index (prompts_fts_idx)
+ * and tags array index (prompts_tags_idx)
+ */
+export async function searchPrompts(
+  options: SearchPromptsOptions = {}
+): Promise<{ prompts: NormalizedPrompt[]; error: PostgrestError | null }> {
+  const { query, tags, limit = 50 } = options;
+
+  let queryBuilder = supabase
+    .from('prompts')
+    .select(PROMPT_COLUMNS);
+
+  if (query && query.trim()) {
+    // Prefix match each word, so "cyber" still finds "cyberpunk". Anything
+    // that is not a letter or digit is dropped, because to_tsquery treats
+    // characters like & | ! : ( ) as syntax and throws on stray ones.
+    const terms = query
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(Boolean)
+      .map((word) => `${word}:*`);
+
+    // Nothing searchable left, e.g. a query of only punctuation.
+    if (terms.length === 0) return { prompts: [], error: null };
+
+    queryBuilder = queryBuilder.textSearch('fts', terms.join(' & '), {
+      config: 'english',
+    });
+  }
+
+  if (tags && tags.length > 0) {
+    queryBuilder = queryBuilder.overlaps('tags', tags);
+  }
+
+  const { data, error } = await queryBuilder
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('❌ searchPrompts: Fetch failed:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+    return { prompts: [], error };
+  }
+
+  const normalizedPrompts: NormalizedPrompt[] = (data || []).map(normalizePromptRow);
+
+  return { prompts: normalizedPrompts, error: null };
 }
 
 /**

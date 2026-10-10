@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, ImageIcon } from "lucide-react";
 import { getErrorMessage } from "@/lib/errors";
+import { DeleteAccountSection } from "@/components/profile/DeleteAccountSection";
 
 
 export default function Settings() {
@@ -286,7 +288,7 @@ export default function Settings() {
       <div className="min-h-screen min-h-[100dvh] bg-background">
         <Navbar />
         <main className="pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 text-center py-12 sm:py-16">
-          <p className="text-sm sm:text-base text-muted-foreground">Loading...</p>
+          <PageSkeleton />
         </main>
       </div>
     );
@@ -442,6 +444,8 @@ export default function Settings() {
                 </Button>
               </div>
             </form>
+
+            <DeleteAccountSection />
           </div>
         </div>
       </main>

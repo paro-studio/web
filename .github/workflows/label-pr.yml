@@ -1,0 +1,58 @@
+name: Label PR
+
+# Adds a label from the PR title's prefix, so release notes can group PRs
+# (see .github/release.yml). "fix(prompts): ..." gets bug, "feat: ..." gets
+# enhancement, and so on. When a title changes it swaps the label the old
+# title gave it for the new one. Labels a maintainer adds by hand stay put.
+# Every label in LABELS must already exist in the repo.
+#
+# pull_request_target is needed so this can label PRs from forks. That trigger
+# runs with a write token against the base repo, so this workflow must NEVER
+# check out or run code from the pull request. It only reads the title.
+# Do not add actions/checkout here.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      # Pinned to a SHA because this workflow runs with a write token.
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const LABELS = {
+              feat: 'enhancement',
+              fix: 'bug',
+              perf: 'performance',
+              docs: 'documentation',
+              test: 'infrastructure',
+              chore: 'infrastructure',
+              ci: 'infrastructure',
+              build: 'infrastructure',
+              refactor: 'infrastructure',
+            };
+
+            const labelFor = title => LABELS[title.match(/^(\w+)(?:\([^)]*\))?!?:/)?.[1]?.toLowerCase()];
+
+            const pr = context.payload.pull_request;
+            const label = labelFor(pr.title);
+            const current = pr.labels.map(l => l.name);
+            const repo = { owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number };
+
+            // If the title changed, drop the label the old title gave it, so a
+            // PR renamed from feat: to fix: doesn't land in two sections.
+            const oldTitle = context.payload.changes?.title?.from;
+            const oldLabel = oldTitle && labelFor(oldTitle);
+            if (oldLabel && oldLabel !== label && current.includes(oldLabel)) {
+              await github.rest.issues.removeLabel({ ...repo, name: oldLabel });
+            }
+
+            if (!label || current.includes(label)) return;
+            await github.rest.issues.addLabels({ ...repo, labels: [label] });

@@ -1,3 +1,4 @@
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,6 +19,9 @@ import Index from "./pages/Index";
 // Settings, Profile and every other page before it could render.
 const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
 const CommunityGuidelines = lazy(() => import("./pages/CommunityGuidelines"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const DeleteAccountInfo = lazy(() => import("./pages/DeleteAccountInfo"));
 const ParoOriginals = lazy(() => import("./pages/ParoOriginals"));
 const PromptDetail = lazy(() => import("./pages/PromptDetail"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -56,7 +60,8 @@ const RouteFallback = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <AppErrorBoundary>
+    <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <AuthProvider>
         <TooltipProvider>
@@ -72,6 +77,10 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/guidelines" element={<CommunityGuidelines />} />
                 <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+                {/* Public on purpose: Google Play links both from the store listing. */}
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/delete-account" element={<DeleteAccountInfo />} />
 
                 {/* Open to everyone so shared links work. The prompt text itself is
                     still sign in only: it is never loaded for signed out visitors,
@@ -99,7 +108,8 @@ const App = () => (
         </TooltipProvider>
       </AuthProvider>
     </ThemeProvider>
-  </QueryClientProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 );
 
 export default App;

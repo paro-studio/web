@@ -14,6 +14,7 @@ begin;
 do $$
 declare
   owner_id  uuid := gen_random_uuid();
+  viewer_id uuid := gen_random_uuid();
   prompt_a  uuid;
   prompt_b  uuid;
   views     integer;
@@ -21,6 +22,8 @@ declare
 begin
   insert into auth.users (id) values (owner_id);
   insert into public.profiles (id, username, verified) values (owner_id, 'counter_test', true);
+  insert into auth.users (id) values (viewer_id);
+  insert into public.profiles (id, username) values (viewer_id, 'counter_viewer');
 
   insert into public.prompts (user_id, title, prompt, image_url, ai_tool)
   values (owner_id, 'A', 'prompt a', 'https://example.test/a.png', 'Midjourney')
@@ -71,9 +74,11 @@ begin
   perform public.increment_view_count(gen_random_uuid());
 
   -- Signed in: one view and one copy per user per prompt -------------------
+  -- As someone other than the creator: since 20261007020000 a creator copying
+  -- their own prompt does not count.
   execute format(
     'create or replace function auth.uid() returns uuid language sql stable as $f$ select %L::uuid $f$',
-    owner_id
+    viewer_id
   );
 
   perform public.increment_view_count(prompt_a);
