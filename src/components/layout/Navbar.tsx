@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, X, Sparkles, TrendingUp, Copy, Clock, Users, HelpCircle, Plus, Heart, Bookmark, DollarSign, MessageSquare, FileText, Github } from "lucide-react";
+import { Search, X, Sparkles, TrendingUp, Copy, Clock, Users, HelpCircle, Plus, Heart, Bookmark, DollarSign, MessageSquare, FileText, Github, Settings, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,64 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 type SortOption = "trending" | "newest" | "most_copied";
+
+interface AccountHeaderProps {
+  profileId?: string;
+  avatarUrl?: string | null;
+  displayName?: string | null;
+  username?: string | null;
+  email?: string | null;
+}
+
+/** Who is signed in, at the top of the account menus. Links to their profile. */
+function AccountHeader({ profileId, avatarUrl, displayName, username, email }: AccountHeaderProps) {
+  const name = displayName || username || email || "Your account";
+  const content = (
+    <>
+      <Avatar className="h-9 w-9 flex-shrink-0">
+        <AvatarImage src={avatarUrl || ""} alt="" />
+        <AvatarFallback className="bg-secondary text-secondary-foreground font-medium">
+          {name.charAt(0).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <p className="text-sm font-medium truncate">{name}</p>
+        {/* Muted grey is unreadable on the highlight, so follow the item's
+            highlighted text colour, a little softer than the name. */}
+        {username && (
+          <p className="text-xs text-muted-foreground group-focus:text-accent-foreground/70 truncate">@{username}</p>
+        )}
+      </div>
+    </>
+  );
+
+  // No profile row yet (still loading or never finished sign up): show who
+  // is signed in without linking anywhere.
+  if (!profileId) return <div className="flex items-center gap-3 px-2 py-2">{content}</div>;
+
+  return (
+    <DropdownMenuItem asChild>
+      <Link to={`/profile/${profileId}`} className="group flex items-center gap-3 py-2">
+        {content}
+      </Link>
+    </DropdownMenuItem>
+  );
+}
+
+/** Small uppercase heading for a group of menu items. */
+function MenuHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <DropdownMenuLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      {children}
+    </DropdownMenuLabel>
+  );
+}
 
 interface NavbarProps {
   onSearch?: (query: string) => void;
@@ -156,15 +209,16 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    {profile?.id && (
-                      <DropdownMenuItem asChild>
-                        <Link to={`/profile/${profile.id}`}>Profile</Link>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem asChild>
-                      <Link to="/upload">Upload Prompt</Link>
-                    </DropdownMenuItem>
+                  {/* Account only. Create and GitHub are already in the navbar,
+                      and the site links live in the footer. */}
+                  <DropdownMenuContent align="end" className="w-60">
+                    <AccountHeader
+                      profileId={profile?.id}
+                      avatarUrl={profile?.avatar_url}
+                      displayName={profile?.display_name}
+                      username={profile?.username}
+                      email={user.email}
+                    />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                       <Link to="/saved" className="flex items-center gap-2">
@@ -180,44 +234,13 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link to="/top-creators" className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        Top Creators
+                      <Link to="/settings" className="flex items-center gap-2">
+                        <Settings className="h-4 w-4" />
+                        Settings
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/feedback" className="flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4" />
-                        Feedback
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to="/guidelines" className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Community Guidelines
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a
-                        href="https://github.com/paro-studio"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2"
-                      >
-                        <Github className="h-4 w-4" />
-                        GitHub
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {/* Earn With PARO */}
-                    <DropdownMenuItem asChild>
-                      <Link to="/earn" className="group flex items-center gap-2 text-gold">
-                        <DollarSign className="h-4 w-4 transition-colors group-hover:text-black group-focus:text-black" />
-                        <span className="transition-colors group-hover:text-black group-focus:text-black">Earn With PARO</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={signOut} className="text-destructive">
+                    <DropdownMenuItem onClick={signOut} className="flex items-center gap-2">
+                      <LogOut className="h-4 w-4" />
                       Log out
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -284,13 +307,35 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 max-h-[80vh] overflow-y-auto">
+                  {/* The only menu on phones, so unlike desktop it also carries
+                      sorting and the site links, grouped under headings. */}
+                  <DropdownMenuContent align="end" className="w-60 max-h-[80vh] overflow-y-auto">
+                    <AccountHeader
+                      profileId={profile?.id}
+                      avatarUrl={profile?.avatar_url}
+                      displayName={profile?.display_name}
+                      username={profile?.username}
+                      email={user.email}
+                    />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link to="/saved" className="flex items-center gap-2">
+                        <Bookmark className="h-4 w-4" />
+                        Saved
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/liked" className="flex items-center gap-2">
+                        <Heart className="h-4 w-4" />
+                        Liked
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+
                     {/* Sort Options */}
                     {showFilters && onSortChange && (
                       <>
-                        <div className="px-2 py-1.5">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Sort By</p>
-                        </div>
+                        <MenuHeading>Sort By</MenuHeading>
                         {sortOptions.map((option) => (
                           <DropdownMenuItem
                             key={option.value}
@@ -305,31 +350,32 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                       </>
                     )}
 
-                    {/* PARO Originals */}
+                    <MenuHeading>Explore</MenuHeading>
                     <DropdownMenuItem asChild>
                       <Link to="/originals" className="group flex items-center gap-2 text-gold">
                         <Sparkles className="h-4 w-4 transition-colors group-hover:text-black group-focus:text-black" />
                         <span className="text-foreground dark:text-gold transition-colors group-hover:text-black group-focus:text-black">PARO Originals</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-
-                    {/* Profile Links */}
-                    {profile?.id && (
-                      <DropdownMenuItem asChild>
-                        <Link to={`/profile/${profile.id}`}>Profile</Link>
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuItem asChild>
-                      <Link to="/saved" className="flex items-center gap-2">
-                        <Bookmark className="h-4 w-4" />
-                        Saved
+                      <Link to="/top-creators" className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Top Creators
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link to="/liked" className="flex items-center gap-2">
-                        <Heart className="h-4 w-4" />
-                        Liked
+                      <Link to="/earn" className="group flex items-center gap-2 text-gold">
+                        <DollarSign className="h-4 w-4 transition-colors group-hover:text-black group-focus:text-black" />
+                        <span className="transition-colors group-hover:text-black group-focus:text-black">Earn With PARO</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+
+                    <MenuHeading>Help</MenuHeading>
+                    <DropdownMenuItem asChild>
+                      <Link to="/guidelines" className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Community Guidelines
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -339,19 +385,10 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link to="/guidelines" className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Community Guidelines
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-
-                    {/* Earn With PARO */}
-                    <DropdownMenuItem asChild>
-                      <Link to="/earn" className="group flex items-center gap-2 text-gold">
-                        <DollarSign className="h-4 w-4 transition-colors group-hover:text-black group-focus:text-black" />
-                        <span className="transition-colors group-hover:text-black group-focus:text-black">Earn With PARO</span>
-                      </Link>
+                      <a href="mailto:parostudio2026@gmail.com" className="flex items-center gap-2">
+                        <HelpCircle className="h-4 w-4" />
+                        Support
+                      </a>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
 
@@ -362,17 +399,14 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
                     </div>
                     <DropdownMenuSeparator />
 
-                    {/* Support */}
                     <DropdownMenuItem asChild>
-                      <a href="mailto:support@parostudios.in" className="flex items-center gap-2">
-                        <HelpCircle className="h-4 w-4" />
-                        Support
-                      </a>
+                      <Link to="/settings" className="flex items-center gap-2">
+                        <Settings className="h-4 w-4" />
+                        Settings
+                      </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-
-                    {/* Logout */}
-                    <DropdownMenuItem onClick={signOut} className="text-destructive">
+                    <DropdownMenuItem onClick={signOut} className="flex items-center gap-2">
+                      <LogOut className="h-4 w-4" />
                       Log out
                     </DropdownMenuItem>
                   </DropdownMenuContent>

@@ -23,8 +23,8 @@ describe("Feedback Page", () => {
       </MemoryRouter>
     );
 
-    const emailLink = screen.getByRole("link", { name: "support@parostudios.in" });
+    const emailLink = screen.getByRole("link", { name: "parostudio2026@gmail.com" });
     expect(emailLink).toBeDefined();
-    expect(emailLink.getAttribute("href")).toBe("mailto:support@parostudios.in");
+    expect(emailLink.getAttribute("href")).toBe("mailto:parostudio2026@gmail.com");
   });
 });

@@ -1,0 +1,35 @@
+# Groups the notes GitHub writes when you press "Generate release notes".
+# PRs get their label from their title prefix (see workflows/label-pr.yml),
+# so feat:, fix: and perf: land in the right section on their own.
+changelog:
+  exclude:
+    labels:
+      - dependencies
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: ✨ New
+      labels:
+        - enhancement
+    - title: 🐛 Fixes
+      labels:
+        - bug
+    - title: ⚡ Faster
+      labels:
+        - performance
+    - title: ♿ Accessibility
+      labels:
+        - accessibility
+    - title: 🔒 Security
+      labels:
+        - security
+    - title: 📝 Docs
+      labels:
+        - documentation
+    - title: 🔧 Under the hood
+      labels:
+        - infrastructure
+    - title: Other changes
+      labels:
+        - "*"

@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, ImageIcon } from "lucide-react";
 import { getErrorMessage } from "@/lib/errors";
+import { DeleteAccountSection } from "@/components/profile/DeleteAccountSection";
 
 
 export default function Settings() {
@@ -443,6 +444,8 @@ export default function Settings() {
                 </Button>
               </div>
             </form>
+
+            <DeleteAccountSection />
           </div>
         </div>
       </main>

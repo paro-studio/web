@@ -1,11 +1,12 @@
 # Supabase CLI config.
 #
 # PARO does not run the local Supabase stack, so there is no [db], [auth] or
-# [studio] section here and you do not need Docker. The CLI is used for two
+# [studio] section here and you do not need Docker. The CLI is used for three
 # things only:
 #
 #   supabase db push          apply migrations to the linked remote project
 #   supabase gen types        regenerate src/services/supabase/database.types.ts
+#   supabase functions deploy deploy the Edge Functions in supabase/functions
 #
 # `project_id` below only names the local project. It is not the remote project
 # reference. The remote you are linked to is stored in supabase/.temp/, which is
@@ -30,3 +31,19 @@ port = 54322
 #
 # Run it by hand after signing up locally, the same way contributors do.
 enabled = false
+
+[functions.notify-report]
+# Called by Database Webhooks, which have no signed in user to send a token
+# for. The function checks a shared secret in the x-webhook-secret header
+# instead, see its header comment.
+verify_jwt = false
+
+[functions.moderate-prompt]
+# Called by database triggers, like notify-report, and checks the same shared
+# secret in the x-webhook-secret header.
+verify_jwt = false
+
+[functions.send-push]
+# Called by database triggers and by moderate-prompt, and checks the same
+# shared secret in the x-webhook-secret header.
+verify_jwt = false

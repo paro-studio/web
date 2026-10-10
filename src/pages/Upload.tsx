@@ -1,7 +1,7 @@
 import { PageSkeleton } from "@/components/PageSkeleton";
 
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -396,7 +396,7 @@ export default function UploadPrompt() {
                         <strong className="text-foreground">{limitStatus.remaining} of {limitStatus.limit}</strong> daily uploads remaining today
                       </span>
                     </div>
-                    <span className="text-[11px] sm:text-xs text-muted-foreground/80">Resets at 12:00 AM UTC</span>
+                    <span className="text-xs text-muted-foreground/80">Resets at 12:00 AM UTC</span>
                   </div>
                 )}
               </div>
@@ -611,6 +611,17 @@ export default function UploadPrompt() {
                         ? "Daily Limit Reached (3/3)"
                         : "Upload Prompt"}
               </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                By uploading you agree to the{" "}
+                <Link to="/terms" className="underline underline-offset-4 hover:text-foreground">
+                  Terms of Use
+                </Link>{" "}
+                and{" "}
+                <Link to="/guidelines" className="underline underline-offset-4 hover:text-foreground">
+                  Community Guidelines
+                </Link>
+                .
+              </p>
             </form>
           </div>
         </div>

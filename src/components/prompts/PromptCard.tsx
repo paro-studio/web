@@ -29,6 +29,15 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PromptCardProps {
   id: string;
@@ -482,8 +491,8 @@ export function PromptCard({
           )}
         </button>
 
-        {/* Like & Save - top RIGHT on desktop only, visible on hover */}
-        <div className="absolute top-2 sm:top-3 right-2 sm:right-3 hidden md:flex gap-1.5 sm:gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-medium">
+        {/* Like & Save - top RIGHT on tablet/desktop, visible on hover, always visible on touch */}
+        <div className="absolute top-2 sm:top-3 right-2 sm:right-3 hidden md:flex gap-1.5 sm:gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:!opacity-100 transition-opacity duration-medium">
           <button
             onClick={handleLike}
             className="p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 touch-target flex items-center justify-center"
@@ -513,10 +522,10 @@ export function PromptCard({
           </button>
         </div>
 
-        {/* Share button - bottom RIGHT on desktop only, visible on hover, stacked over watermark */}
+        {/* Share button - bottom RIGHT on tablet/desktop, visible on hover, always visible on touch, stacked over watermark */}
         <button
           onClick={handleShare}
-          className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 hidden md:flex p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 opacity-0 group-hover:opacity-100 z-10 items-center justify-center"
+          className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 hidden md:flex p-1.5 sm:p-2 rounded-full bg-background shadow-soft transition-all duration-200 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:!opacity-100 z-10 items-center justify-center"
           title="Share"
           aria-label="Share prompt"
         >
@@ -569,6 +578,10 @@ export function PromptCard({
             </DropdownMenuTrigger>
             
             <DropdownMenuContent align="end" className="w-48">
+              {/* No preventDefault on items that open a dialog: Radix keeps the
+                  menu open when the click is default prevented, which leaves
+                  it behind the dialog and loses focus when the dialog closes.
+                  The handlers are called without the event for that reason. */}
               <DropdownMenuItem onClick={() => void handleCopy()}>
                 {copied ? <Check className="h-4 w-4 mr-2 text-gold" /> : <Copy className="h-4 w-4 mr-2" />}
                 {copied ? "Copied Prompt" : "Copy Prompt"}
@@ -731,7 +744,7 @@ export function PromptCard({
               aria-label="Not yet rated"
             >
               <Star className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[11px] sm:text-xs">Not rated</span>
+              <span className="text-xs">Not rated</span>
             </button>
           )}
         </div>
@@ -757,32 +770,35 @@ export function PromptCard({
       />
 
       {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowDeleteDialog(false)}>
-          <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">Delete Prompt?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+      <Dialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Prompt?</DialogTitle>
+            <DialogDescription>
               This will permanently delete this prompt and its image. This cannot be undone.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowDeleteDialog(false)}
-                disabled={isDeleting}
-                className="px-4 py-2 text-sm border border-border rounded-sm hover:bg-secondary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 text-sm bg-destructive text-destructive-foreground rounded-sm hover:bg-destructive/90 transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

@@ -104,6 +104,12 @@ jobs:
       - name: Assert write rules for created_at, profiles and storage
         run: psql -v ON_ERROR_STOP=1 -f supabase/ci/assert_write_rules.sql
 
+      - name: Assert limits hold against bulk inserts and direct API calls
+        run: psql -v ON_ERROR_STOP=1 -f supabase/ci/assert_abuse_limits.sql
+
+      - name: Assert push tokens can only be registered and removed by their owner
+        run: psql -v ON_ERROR_STOP=1 -f supabase/ci/assert_push_tokens.sql
+
   # A workflow with a syntax or expression error does not fail, it just never
   # runs. This catches that, plus shell mistakes inside run steps.
   actionlint:

@@ -33,10 +33,25 @@ export function Footer() {
                 <Link to="/originals" className="hover:text-foreground transition-colors">PARO Originals</Link>
               </li>
               <li>
+                <Link to="/top-creators" className="hover:text-foreground transition-colors">Top Creators</Link>
+              </li>
+              <li>
                 <Link to="/upload" className="hover:text-foreground transition-colors">Create Prompt</Link>
               </li>
               <li>
+                <Link to="/earn" className="hover:text-foreground transition-colors">Earn With PARO</Link>
+              </li>
+              <li>
                 <Link to="/guidelines" className="hover:text-foreground transition-colors">Community Guidelines</Link>
+              </li>
+              <li>
+                <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Use</Link>
+              </li>
+              <li>
+                <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+              </li>
+              <li>
+                <Link to="/feedback" className="hover:text-foreground transition-colors">Feedback</Link>
               </li>
             </ul>
           </div>
@@ -82,6 +97,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-border mt-8 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-muted-foreground">
           <p>© {currentYear} Paro Studio. All rights reserved.</p>
+          <p>Every image on Paro is made or edited with AI.</p>
         </div>
       </div>
     </footer>
