@@ -7,7 +7,7 @@ import { Lock } from "lucide-react";
 export const DISCORD_URL = "https://discord.com/invite/zNZ3TAwy73";
 export const SUPPORT_EMAIL = "parostudio2026@gmail.com";
 
-export const PRIVACY_UPDATED = "9 October 2026";
+export const PRIVACY_UPDATED = "21 October 2026";
 
 interface PolicySection {
   title: string;
@@ -66,7 +66,7 @@ const SECTIONS: PolicySection[] = [
     paragraphs: [
       "To run Paro: to sign you in, show your profile and prompts, count views and copies, keep to the daily posting limit, and look into reports.",
       "To keep Paro safe: every new prompt's image, title, prompt text and tags are checked automatically for content that breaks the community guidelines. A prompt that fails the check is removed, and one that is unclear is looked at by the Paro team.",
-      "If notifications are on, to tell you about a new follower, a like on your prompt, or a new prompt from someone you follow. Nothing else is sent, and you can turn them off in Settings at any time.",
+      "If notifications are on, to tell you about a new follower, a like or a rating on your prompt, or a new prompt from someone you follow. Nothing else is sent, and you can turn them off in Settings at any time.",
       "Crash reports are used only to find and fix problems in the app.",
       "We do not sell your data, show ads, or track you across other apps and websites.",
     ],
