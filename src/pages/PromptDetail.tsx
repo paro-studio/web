@@ -9,6 +9,7 @@ import { Eye, Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "luci
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { QueryError } from "@/components/QueryError";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,7 +57,7 @@ export default function PromptDetail() {
     }
   }, [id]);
 
-  const { data: prompt, isLoading } = useQuery<PromptDetailData | null>({
+  const { data: prompt, isLoading, isError, isFetching, refetch } = useQuery<PromptDetailData | null>({
     queryKey: ["prompt", id, user?.id],
     queryFn: async () => {
       if (!id) return null;
@@ -64,8 +65,15 @@ export default function PromptDetail() {
       // Get prompt from Supabase
       const { prompt: data, error } = await getPrompt(id);
       
-      if (error || !data) {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
         console.error('Error fetching prompt:', error);
+        throw error;
+      }
+
+      if (!data) {
         return null;
       }
 
@@ -345,6 +353,24 @@ export default function PromptDetail() {
     );
   }
 
+  if (isError && !prompt) {
+    return (
+      <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+          <QueryError
+            resource="prompt"
+            onRetry={() => {
+              void refetch();
+            }}
+            retrying={isFetching}
+          />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   if (!prompt) {
     return (
       <div className="min-h-screen min-h-[100dvh] bg-background">
@@ -367,6 +393,15 @@ export default function PromptDetail() {
         {/* Main content section - compact to show recommendations without scroll */}
         <section className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6">
           <div className="max-w-[1400px] mx-auto">
+            {isError && (
+              <QueryError
+                resource="prompt"
+                onRetry={() => {
+                  void refetch();
+                }}
+                retrying={isFetching}
+              />
+            )}
             {/* Back button. A real history back when the visitor came from
                 inside the app, so the feed returns to where they were
                 scrolled. Linking to "/" opened the feed fresh, at the top.

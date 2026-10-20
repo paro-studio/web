@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +49,8 @@ const profile = {
 };
 
 let activeProfile = profile;
+let currentPromptData: typeof prompt | null = prompt;
+let currentPromptError: { code: string; message?: string } | null = null;
 
 function createQueryBuilder(table: string) {
   const builder = {
@@ -58,8 +60,8 @@ function createQueryBuilder(table: string) {
     order: () => builder,
     limit: () => builder,
     single: async () => ({
-      data: table === "prompts" ? prompt : activeProfile,
-      error: null,
+      data: table === "prompts" ? currentPromptData : activeProfile,
+      error: table === "prompts" ? currentPromptError : null,
     }),
     maybeSingle: async () => ({ data: null, error: null }),
     then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
@@ -103,6 +105,8 @@ describe("PromptDetail", () => {
     clearViewTracking();
     vi.clearAllMocks();
     activeProfile = profile;
+    currentPromptData = prompt;
+    currentPromptError = null;
     vi.mocked(supabase.from).mockImplementation((table) => createQueryBuilder(table));
     vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: null });
   });
@@ -203,5 +207,37 @@ describe("PromptDetail", () => {
     expect(await screen.findByText("Cached card")).toBeInTheDocument();
     expect(screen.getByLabelText("Unlike")).toBeInTheDocument();
     expect(screen.getByTitle("Likes")).toHaveTextContent("7");
+  });
+
+  it("renders 'Prompt not found' when prompt does not exist (PGRST116)", async () => {
+    currentPromptData = null;
+    currentPromptError = { code: "PGRST116", message: "No rows found" };
+
+    renderPromptDetail();
+
+    expect(await screen.findByText("Prompt not found")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Return home" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renders QueryError and allows retry when prompt load fails due to network/database error", async () => {
+    currentPromptData = null;
+    currentPromptError = { code: "503", message: "Database connection failed" };
+
+    renderPromptDetail();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We couldn't load prompt. Please try again.");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByText("Prompt not found")).not.toBeInTheDocument();
+
+    // Recover on retry
+    currentPromptData = prompt;
+    currentPromptError = null;
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("Test prompt")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 });

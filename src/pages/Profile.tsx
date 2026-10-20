@@ -32,7 +32,13 @@ export default function Profile() {
   const [editingPrompt, setEditingPrompt] = useState<PromptWithDetails | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const { data: profile, isLoading: profileLoading } = useQuery({
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    isError: profileError,
+    isFetching: profileFetching,
+    refetch: refetchProfile,
+  } = useQuery({
     queryKey: ["profile", id],
     queryFn: async () => {
       if (!id) return null;
@@ -172,6 +178,24 @@ export default function Profile() {
     );
   }
 
+  if (profileError && !profile) {
+    return (
+      <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+          <QueryError
+            resource="profile"
+            onRetry={() => {
+              void refetchProfile();
+            }}
+            retrying={profileFetching}
+          />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   if (!profile) {
     return (
       <div className="min-h-screen min-h-[100dvh] bg-background">
@@ -193,6 +217,17 @@ export default function Profile() {
       <Navbar />
 
       <main className="flex-1 pt-14 sm:pt-16 lg:pt-20">
+        {profileError && (
+          <div className="px-4 sm:px-6 lg:px-8 pt-4">
+            <QueryError
+              resource="profile"
+              onRetry={() => {
+                void refetchProfile();
+              }}
+              retrying={profileFetching}
+            />
+          </div>
+        )}
         {/* Cover Photo */}
         <div className="relative h-32 xs:h-40 sm:h-48 md:h-56 lg:h-64 bg-secondary overflow-hidden">
           {coverUrl ? (

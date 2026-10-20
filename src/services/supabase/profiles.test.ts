@@ -122,5 +122,21 @@ describe("profiles service", () => {
       const profile = await getProfile("non-existent");
       expect(profile).toBeNull();
     });
+
+    it("throws for non-PGRST116 errors", async () => {
+      const dbError = { code: "PGRST500", message: "Database connection failed" };
+      const singleMock = vi.fn().mockResolvedValue({
+        data: null,
+        error: dbError,
+      });
+      const eqMock = vi.fn().mockReturnValue({ single: singleMock });
+      const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
+
+      vi.mocked(supabase.from).mockReturnValue({
+        select: selectMock,
+      } as never);
+
+      await expect(getProfile("user-1")).rejects.toEqual(dbError);
+    });
   });
 });
