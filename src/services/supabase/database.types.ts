@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   graphql_public: {
     Tables: {
@@ -39,6 +39,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_config: {
+        Row: {
+          key: string
+          value: string
+        }
+        Insert: {
+          key: string
+          value: string
+        }
+        Update: {
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       blocks: {
         Row: {
           blocked_id: string
@@ -173,6 +188,55 @@ export type Database = {
           {
             foreignKeyName: "likes_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_events: {
+        Row: {
+          actor_id: string
+          created_at: string
+          id: string
+          kind: string
+          prompt_id: string | null
+          recipient_id: string
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          prompt_id?: string | null
+          recipient_id: string
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          prompt_id?: string | null
+          recipient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_events_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "prompts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_events_recipient_id_fkey"
+            columns: ["recipient_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -378,7 +442,7 @@ export type Database = {
           ai_tool: string
           copy_count: number
           created_at: string
-          fts: unknown | null
+          fts: unknown
           id: string
           image_url: string
           like_count: number
@@ -395,6 +459,7 @@ export type Database = {
           ai_tool: string
           copy_count?: number
           created_at?: string
+          fts?: unknown
           id?: string
           image_url: string
           like_count?: number
@@ -411,6 +476,7 @@ export type Database = {
           ai_tool?: string
           copy_count?: number
           created_at?: string
+          fts?: unknown
           id?: string
           image_url?: string
           like_count?: number
@@ -426,6 +492,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "prompts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          last_seen_at: string
+          platform: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          last_seen_at?: string
+          platform: string
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          last_seen_at?: string
+          platform?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -525,13 +623,22 @@ export type Database = {
         }
         Returns: boolean
       }
+      immutable_array_to_string: {
+        Args: { arr: string[]; sep: string }
+        Returns: string
+      }
       increment_copy_count: { Args: { prompt_id: string }; Returns: undefined }
       increment_view_count: { Args: { prompt_id: string }; Returns: undefined }
+      own_storage_host: { Args: never; Returns: string }
       prompt_counter_actor: { Args: never; Returns: string }
       prompt_image_quota_ok: { Args: never; Returns: boolean }
       register_push_token: {
         Args: { device_platform: string; push_token: string }
         Returns: undefined
+      }
+      storage_url_pattern: {
+        Args: { bucket: string; folder: string }
+        Returns: string
       }
       unregister_push_token: {
         Args: { push_token: string }
