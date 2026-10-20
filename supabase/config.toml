@@ -47,3 +47,8 @@ verify_jwt = false
 # Called by database triggers and by moderate-prompt, and checks the same
 # shared secret in the x-webhook-secret header.
 verify_jwt = false
+
+[functions.delete-prompt-image]
+# Called by a database trigger when a prompt is deleted, and checks the same
+# shared secret in the x-webhook-secret header.
+verify_jwt = false
