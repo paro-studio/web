@@ -94,6 +94,8 @@ export interface Prompt {
   title: string;
   prompt: string;
   image_url: string;
+  image_width?: number | null;
+  image_height?: number | null;
   ai_tool: string;
   tags?: string[];
   view_count?: number;
@@ -108,6 +110,8 @@ export interface CreatePromptData {
   title: string;
   prompt: string;
   image_url: string;
+  image_width?: number | null;
+  image_height?: number | null;
   ai_tool: string;
   tags?: string[];
 }
@@ -124,6 +128,8 @@ export async function createPrompt(data: CreatePromptData) {
       title: data.title,
       prompt: data.prompt,
       image_url: data.image_url,
+      image_width: data.image_width ?? null,
+      image_height: data.image_height ?? null,
       ai_tool: data.ai_tool,
       tags: data.tags || []
     }])
@@ -164,13 +170,15 @@ export async function createPrompt(data: CreatePromptData) {
  * outright. List columns and leave `prompt` out.
  */
 export const PROMPT_COLUMNS =
-  'id, user_id, title, image_url, ai_tool, tags, created_at, updated_at, view_count, copy_count' as const;
+  'id, user_id, title, image_url, image_width, image_height, ai_tool, tags, created_at, updated_at, view_count, copy_count' as const;
 
 type PromptListRow = {
   id: string;
   user_id: string;
   title: string;
   image_url: string;
+  image_width?: number | null;
+  image_height?: number | null;
   ai_tool: string;
   tags: string[] | null;
   created_at: string;
@@ -184,6 +192,8 @@ function normalizePromptRow(p: PromptListRow): NormalizedPrompt {
     userId: p.user_id,
     title: p.title,
     imageUrl: p.image_url,
+    imageWidth: p.image_width ?? null,
+    imageHeight: p.image_height ?? null,
     toolUsed: p.ai_tool,
     tags: p.tags || [],
     createdAt: p.created_at,

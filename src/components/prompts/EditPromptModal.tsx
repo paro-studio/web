@@ -142,6 +142,8 @@ export function EditPromptModal({
       }
 
       let finalImageUrl = prompt.image_url;
+      let finalImageWidth: number | null | undefined = undefined;
+      let finalImageHeight: number | null | undefined = undefined;
 
       // A changed image has to reach storage before the row is written.
       // `imagePreview` is an object URL that only resolves inside this tab, so
@@ -149,7 +151,7 @@ export function EditPromptModal({
       // with no file anywhere to recover it from.
       if (imageFile) {
         const { uploadPromptImage } = await import('@/services/supabase/storage');
-        const { url, error: uploadError } = await uploadPromptImage(user.id, imageFile);
+        const { url, width, height, error: uploadError } = await uploadPromptImage(user.id, imageFile);
 
         if (uploadError || !url) {
           toast({
@@ -161,18 +163,35 @@ export function EditPromptModal({
         }
 
         finalImageUrl = url;
+        finalImageWidth = width ?? null;
+        finalImageHeight = height ?? null;
       }
 
       // Update prompt in Supabase
       const { updatePrompt } = await import('@/services/supabase/prompts');
 
-      const { prompt: updated, error } = await updatePrompt(prompt.id, user.id, {
+      const updates: {
+        title: string;
+        prompt: string;
+        ai_tool: string;
+        image_url: string;
+        image_width?: number | null;
+        image_height?: number | null;
+        tags: string[];
+      } = {
         title: title.trim(),
         prompt: promptText.trim(),
         ai_tool: actualTool.trim(),
         image_url: finalImageUrl,
         tags: selectedTags
-      });
+      };
+
+      if (imageFile) {
+        updates.image_width = finalImageWidth;
+        updates.image_height = finalImageHeight;
+      }
+
+      const { prompt: updated, error } = await updatePrompt(prompt.id, user.id, updates);
 
       if (error || !updated) {
         throw new Error(error || "Failed to update prompt");

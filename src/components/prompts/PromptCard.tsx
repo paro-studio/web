@@ -43,6 +43,8 @@ interface PromptCardProps {
   id: string;
   title: string;
   imageUrl: string;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   toolUsed: string;
   viewCount?: number | null;
   copyCount?: number | null;
@@ -81,6 +83,8 @@ export function PromptCard({
   id,
   title,
   imageUrl,
+  imageWidth,
+  imageHeight,
   toolUsed,
   viewCount,
   copyCount,
@@ -250,6 +254,8 @@ export function PromptCard({
             <img
               src={imageUrl}
               alt={title}
+              width={imageWidth ?? undefined}
+              height={imageHeight ?? undefined}
               className="w-full h-auto object-cover transition-transform duration-medium group-hover:scale-[1.02]"
               loading={priority ? "eager" : "lazy"}
             />

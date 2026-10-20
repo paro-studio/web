@@ -217,6 +217,8 @@ export default function UploadPrompt() {
 
       let url: string | null = null;
       let uploadError: string | null = null;
+      let imageWidth: number | null = null;
+      let imageHeight: number | null = null;
       setIsUploading(true);
       try {
         const result = await uploadPromptImage(
@@ -225,6 +227,8 @@ export default function UploadPrompt() {
         );
         url = result.url;
         uploadError = result.error;
+        imageWidth = result.width ?? null;
+        imageHeight = result.height ?? null;
       } finally {
         setIsUploading(false);
       }
@@ -248,6 +252,8 @@ export default function UploadPrompt() {
         title: title.trim(),
         prompt: promptText.trim(),
         image_url: uploadedImageUrl,
+        image_width: imageWidth,
+        image_height: imageHeight,
         ai_tool: actualTool,
         tags: tags
       });

@@ -44,6 +44,13 @@ interface UploadResult {
   error: string | null;
 }
 
+export interface PromptUploadResult {
+  url: string | null;
+  width?: number | null;
+  height?: number | null;
+  error: string | null;
+}
+
 /**
  * Avatars and banners live at a fixed path per user and are overwritten in
  * place, so their public URL never changes and the browser keeps serving the
@@ -81,7 +88,7 @@ export async function uploadAvatar(userId: string, file: File): Promise<UploadRe
     // Downscale before uploading. A phone photo is several MB and renders in a
     // circle a few dozen pixels wide, so this is the difference between a slow
     // upload and an instant one.
-    const resized = await resizeImage(file, AVATAR_BOUNDS);
+    const { file: resized } = await resizeImage(file, AVATAR_BOUNDS);
 
     if (resized.size > MAX_AVATAR_SIZE) {
       return {
@@ -152,7 +159,7 @@ export async function uploadBanner(userId: string, file: File): Promise<UploadRe
       };
     }
 
-    const resized = await resizeImage(file, BANNER_BOUNDS);
+    const { file: resized } = await resizeImage(file, BANNER_BOUNDS);
 
     if (resized.size > MAX_BANNER_SIZE) {
       return {
@@ -205,7 +212,7 @@ export async function uploadBanner(userId: string, file: File): Promise<UploadRe
  * Path: prompt-images/{userId}/{uuid}.ext
  * Does NOT overwrite - uses unique UUID for each image
  */
-export async function uploadPromptImage(userId: string, file: File): Promise<UploadResult> {
+export async function uploadPromptImage(userId: string, file: File): Promise<PromptUploadResult> {
   const PROMPT_BUCKET = 'prompt-images';
   const MAX_SIZE = 3 * 1024 * 1024; // 3MB
 
@@ -227,7 +234,7 @@ export async function uploadPromptImage(userId: string, file: File): Promise<Upl
 
     // Prompt images are the thing people came to look at, so they keep more
     // resolution and quality than avatars and banners.
-    const resized = await resizeImage(file, PROMPT_BOUNDS);
+    const { file: resized, width, height } = await resizeImage(file, PROMPT_BOUNDS);
 
     if (resized.size > MAX_SIZE) {
       return {
@@ -269,6 +276,8 @@ export async function uploadPromptImage(userId: string, file: File): Promise<Upl
 
     return {
       url: publicUrl,
+      width: width > 0 ? width : null,
+      height: height > 0 ? height : null,
       error: null
     };
   } catch (error) {

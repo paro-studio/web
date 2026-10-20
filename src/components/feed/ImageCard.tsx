@@ -23,6 +23,8 @@ export function ImageCard({ item, onLikeChange, onSaveChange, onLoginRequired, o
       id={data.id}
       title={data.title}
       imageUrl={data.image_url}
+      imageWidth={data.image_width}
+      imageHeight={data.image_height}
       toolUsed={data.tool_used}
       viewCount={data.view_count}
       copyCount={data.copy_count}

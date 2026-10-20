@@ -20,6 +20,8 @@ export interface NormalizedPrompt {
   userId: string;
   title: string;
   imageUrl: string;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   toolUsed: string;
   tags: string[];
   createdAt: string;

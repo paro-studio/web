@@ -380,7 +380,9 @@ export type Database = {
           created_at: string
           fts: unknown | null
           id: string
+          image_height: number | null
           image_url: string
+          image_width: number | null
           like_count: number
           prompt: string
           rating_average: number | null
@@ -396,7 +398,9 @@ export type Database = {
           copy_count?: number
           created_at?: string
           id?: string
+          image_height?: number | null
           image_url: string
+          image_width?: number | null
           like_count?: number
           prompt: string
           rating_average?: number | null
@@ -412,7 +416,9 @@ export type Database = {
           copy_count?: number
           created_at?: string
           id?: string
+          image_height?: number | null
           image_url?: string
+          image_width?: number | null
           like_count?: number
           prompt?: string
           rating_average?: number | null

@@ -93,6 +93,8 @@ export default function PromptDetail() {
         id: data.id,
         title: data.title,
         imageUrl: data.image_url,
+        imageWidth: data.image_width ?? null,
+        imageHeight: data.image_height ?? null,
         toolUsed: data.ai_tool,
         viewCount: data.view_count || 0,
         copyCount: data.copy_count || 0,
@@ -192,6 +194,8 @@ export default function PromptDetail() {
             id: p.id,
             title: p.title,
             imageUrl: p.imageUrl,
+            imageWidth: p.imageWidth ?? null,
+            imageHeight: p.imageHeight ?? null,
             toolUsed: p.toolUsed,
             viewCount: p.viewCount || 0,
             copyCount: p.copyCount || 0,
@@ -430,6 +434,8 @@ export default function PromptDetail() {
                 <img
                   src={prompt.imageUrl}
                   alt={prompt.title}
+                  width={prompt.imageWidth ?? undefined}
+                  height={prompt.imageHeight ?? undefined}
                   className="max-h-[40vh] sm:max-h-[35vh] lg:max-h-[50vh] w-auto max-w-full object-contain rounded-xl shadow-card"
                   loading="lazy"
                 />
@@ -676,6 +682,8 @@ export default function PromptDetail() {
                       id={rec.id}
                       title={rec.title}
                       imageUrl={rec.imageUrl}
+                      imageWidth={rec.imageWidth}
+                      imageHeight={rec.imageHeight}
                       toolUsed={rec.toolUsed}
                       viewCount={rec.viewCount}
                       copyCount={rec.copyCount}

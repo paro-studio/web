@@ -45,6 +45,8 @@ export default function Liked() {
           id: p.id,
           title: p.title,
           imageUrl: p.imageUrl,
+          imageWidth: p.imageWidth ?? null,
+          imageHeight: p.imageHeight ?? null,
           toolUsed: p.toolUsed,
           viewCount: p.viewCount || 0,
           copyCount: p.copyCount || 0,
@@ -137,6 +139,8 @@ export default function Liked() {
                   id={prompt.id}
                   title={prompt.title}
                   imageUrl={prompt.imageUrl}
+                  imageWidth={prompt.imageWidth}
+                  imageHeight={prompt.imageHeight}
                   toolUsed={prompt.toolUsed}
                   viewCount={prompt.viewCount}
                   copyCount={prompt.copyCount}

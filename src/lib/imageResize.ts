@@ -66,15 +66,22 @@ async function decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
   }
 }
 
+export interface ResizedImage {
+  file: File;
+  width: number;
+  height: number;
+}
+
 /**
  * Downscales and re-encodes to WebP. Returns the original file untouched if
  * anything goes wrong, or if the re-encoded version would be larger, which
- * happens with small images that are already well compressed.
+ * happens with small images that are already well compressed. Also returns
+ * the final width and height of the image.
  */
 export async function resizeImage(
   file: File,
   { maxWidth, maxHeight, quality = 0.85 }: ResizeOptions
-): Promise<File> {
+): Promise<ResizedImage> {
   let source: ImageBitmap | HTMLImageElement;
 
   try {
@@ -82,7 +89,7 @@ export async function resizeImage(
   } catch {
     // A file the browser cannot decode is not worth failing the upload over.
     // It will be rejected by the type check or by the bucket instead.
-    return file;
+    return { file, width: 0, height: 0 };
   }
 
   try {
@@ -95,7 +102,7 @@ export async function resizeImage(
     canvas.height = target.height;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
+    if (!ctx) return { file, width, height };
 
     ctx.drawImage(source, 0, 0, target.width, target.height);
 
@@ -104,19 +111,25 @@ export async function resizeImage(
     );
 
     // toBlob returns null if the browser cannot encode WebP.
-    if (!blob) return file;
+    if (!blob) return { file, width, height };
 
     // Re-encoding a small, already optimised image can make it bigger. Only
     // take the new one if it actually helped.
     if (blob.size >= file.size && target.width === width && target.height === height) {
-      return file;
+      return { file, width, height };
     }
 
     const name = file.name.replace(/\.[^./\\]*$/, "") || "image";
-    return new File([blob], `${name}.webp`, {
+    const resizedFile = new File([blob], `${name}.webp`, {
       type: "image/webp",
       lastModified: Date.now(),
     });
+
+    return {
+      file: resizedFile,
+      width: target.width,
+      height: target.height,
+    };
   } finally {
     if ("close" in source) source.close();
   }

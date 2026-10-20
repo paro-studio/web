@@ -9,6 +9,8 @@ export interface ImageFeedItem {
     id: string;
     title: string;
     image_url: string;
+    image_width?: number | null;
+    image_height?: number | null;
     tool_used: string;
     view_count: number;
     copy_count: number;
@@ -83,6 +85,8 @@ export function toImageFeedItem(prompt: {
   id: string;
   title: string;
   imageUrl: string;    // camelCase from usePrompts
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   toolUsed: string;    // camelCase from usePrompts
   viewCount: number;
   copyCount: number;
@@ -98,7 +102,7 @@ export function toImageFeedItem(prompt: {
   likeCount: number;
   isLiked: boolean;
   isSaved: boolean;
-  accuracyRating?: number;
+  accuracyRating?: number | null;
   ratingCount?: number;
 }): ImageFeedItem {
   return {
@@ -107,6 +111,8 @@ export function toImageFeedItem(prompt: {
       id: prompt.id,
       title: prompt.title,
       image_url: prompt.imageUrl,              // Transform to snake_case
+      image_width: prompt.imageWidth ?? null,
+      image_height: prompt.imageHeight ?? null,
       tool_used: prompt.toolUsed,              // Transform to snake_case
       view_count: prompt.viewCount,
       copy_count: prompt.copyCount,
@@ -122,7 +128,7 @@ export function toImageFeedItem(prompt: {
       tags: prompt.tags,
       is_liked: prompt.isLiked,
       is_saved: prompt.isSaved,
-      accuracy_rating: prompt.accuracyRating,
+      accuracy_rating: prompt.accuracyRating ?? undefined,
       rating_count: prompt.ratingCount,
     },
   };

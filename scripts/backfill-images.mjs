@@ -1,20 +1,16 @@
 /**
- * One-off backfill: downscale images already sitting in storage.
+ * One-off backfill: downscale images already sitting in storage and backfill
+ * image_width and image_height on the prompts table.
  *
  * src/lib/imageResize.ts only affects new uploads. Everything uploaded before
- * that shipped is still a full size original, so the existing feed is exactly
- * as slow as it always was. This walks the buckets and shrinks what is there.
- *
- * It does NOT touch the database. Each file is overwritten at its own path, so
- * every image_url already stored on a prompt stays correct. No rows are read,
- * written or deleted. If this script dies halfway, some images are small and
- * some are not, both display fine, and re-running picks up where it left off.
+ * that shipped is still a full size original, and existing prompt rows lack
+ * image_width/image_height. This walks the buckets to shrink oversized images
+ * and updates the database rows with their width and height.
  *
  * Originals are copied to ./image-backup/ before anything is overwritten.
- * Downscaling is lossy and there is no undo without them.
  *
  *   node scripts/backfill-images.mjs             # dry run, changes nothing
- *   node scripts/backfill-images.mjs --apply     # actually overwrite
+ *   node scripts/backfill-images.mjs --apply     # actually overwrite & update DB
  *
  * Needs SUPABASE_SERVICE_ROLE_KEY in .env.local, which is gitignored. Putting
  * it on the command line would leave it in your shell history.
@@ -174,8 +170,84 @@ async function processBucket(storage, bucket) {
   return { before, after, changed, skipped };
 }
 
+async function backfillPromptDimensions(supabase) {
+  console.log(`\n${'-'.repeat(52)}`);
+  console.log('Backfilling prompt image dimensions in the database...');
+
+  const { data: prompts, error } = await supabase
+    .from('prompts')
+    .select('id, image_url, image_width, image_height')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(`  ! Failed to query prompts: ${error.message}`);
+    return;
+  }
+
+  let dbUpdated = 0;
+  let dbSkipped = 0;
+  let dbFailed = 0;
+
+  for (const prompt of prompts ?? []) {
+    if (prompt.image_width && prompt.image_height) {
+      dbSkipped++;
+      continue;
+    }
+    if (!prompt.image_url) {
+      dbSkipped++;
+      continue;
+    }
+
+    try {
+      let imageBuffer;
+      const urlParts = prompt.image_url.split('/prompt-images/');
+      if (urlParts.length >= 2) {
+        const filePath = decodeURIComponent(urlParts[1].split('?')[0]);
+        const { data, error: downloadError } = await supabase.storage
+          .from('prompt-images')
+          .download(filePath);
+        if (downloadError) throw downloadError;
+        imageBuffer = Buffer.from(await data.arrayBuffer());
+      } else {
+        const response = await fetch(prompt.image_url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        imageBuffer = Buffer.from(await response.arrayBuffer());
+      }
+
+      const meta = await sharp(imageBuffer).metadata();
+      const width = meta.width;
+      const height = meta.height;
+
+      if (!width || !height) {
+        throw new Error('Could not read image dimensions');
+      }
+
+      console.log(`  ${APPLY ? '->' : ' ~'} Prompt ${prompt.id}  ${width}x${height}`);
+
+      if (APPLY) {
+        const { error: updateError } = await supabase
+          .from('prompts')
+          .update({ image_width: width, image_height: height })
+          .eq('id', prompt.id);
+
+        if (updateError) {
+          console.error(`  ! Failed to update prompt ${prompt.id}: ${updateError.message}`);
+          dbFailed++;
+          continue;
+        }
+      }
+      dbUpdated++;
+    } catch (err) {
+      console.log(`  !  Prompt ${prompt.id} (${prompt.image_url}): ${err.message}`);
+      dbFailed++;
+    }
+  }
+
+  console.log(`\nPrompts database: ${dbUpdated} ${APPLY ? 'updated' : 'to update'}, ${dbSkipped} already had dimensions, ${dbFailed} failed`);
+}
+
 const { url, key } = loadEnv();
-const storage = createClient(url, key, { auth: { persistSession: false } }).storage;
+const supabaseClient = createClient(url, key, { auth: { persistSession: false } });
 
 if (!APPLY) {
   console.log('DRY RUN. Nothing will be changed. Re-run with --apply to do it.');
@@ -187,12 +259,14 @@ let totalChanged = 0;
 let totalSkipped = 0;
 
 for (const bucket of BUCKETS) {
-  const result = await processBucket(storage, bucket);
+  const result = await processBucket(supabaseClient.storage, bucket);
   totalBefore += result.before;
   totalAfter += result.after;
   totalChanged += result.changed;
   totalSkipped += result.skipped;
 }
+
+await backfillPromptDimensions(supabaseClient);
 
 const saved = totalBefore ? (100 * (1 - totalAfter / totalBefore)).toFixed(0) : '0';
 

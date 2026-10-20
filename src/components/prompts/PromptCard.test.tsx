@@ -164,6 +164,19 @@ describe("PromptCard", () => {
     expect(viewsElement).toHaveTextContent("150");
   });
 
+  it("renders width and height attributes on img while keeping responsive scaling classes", () => {
+    renderPromptCard({
+      ...baseProps,
+      imageWidth: 800,
+      imageHeight: 600,
+    });
+
+    const image = screen.getByAltText(baseProps.title);
+    expect(image).toHaveAttribute("width", "800");
+    expect(image).toHaveAttribute("height", "600");
+    expect(image).toHaveClass("w-full", "h-auto");
+  });
+
   // useAuth is mocked signed out above. Every gated action should open the sign
   // in dialog through onLoginRequired, not just show a toast.
   it.each([
