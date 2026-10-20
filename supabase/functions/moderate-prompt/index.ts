@@ -42,13 +42,17 @@
  *       '{}', '10000');
  *
  *   create trigger moderate_changed_prompt_image
- *     after update of image_url on public.prompts
+ *     after update of image_url, title, prompt, tags on public.prompts
  *     for each row execute function supabase_functions.http_request(
  *       ... the same five arguments ... );
  *
- * "update of image_url" matters: it fires only when an update names that
- * column, so the counter triggers, which touch the row on every view and
- * like, do not call this. The triggers send
+ * (20261021010000 rebuilt the second one from the first version, which
+ * fired on image_url alone, so an edit to the words was never checked.)
+ *
+ * The column list matters: it fires only when an update names one of them,
+ * so the counter triggers, which touch the row on every view and like, do
+ * not call this. Edits to these four columns are limited to 20 a day per
+ * person in the database, since each one costs a check. The triggers send
  *
  *   { "type": "INSERT" | "UPDATE", "table": "prompts",
  *     "record": { ... }, "old_record": { ... } }

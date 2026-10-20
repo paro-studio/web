@@ -104,6 +104,12 @@ begin
 end;
 $$;
 
+-- The images the tests below post with: a prompt may only point at a file
+-- that has been uploaded (20261021010000).
+insert into storage.objects (bucket_id, name) values
+  ('prompt-images', '11111111-1111-1111-1111-111111111111/p.jpg'),
+  ('prompt-images', '11111111-1111-1111-1111-111111111111/new.webp');
+
 -- From here on, act as the signed in user ----------------------------------
 
 set local role authenticated;
@@ -195,8 +201,9 @@ begin
     me || '/renamed.png', me || '/avatar.jpg'),
     '42501', 'renaming the avatar to another file name');
 
-  -- Three prompts so far, so three plus five files are allowed.
-  for i in 1..8 loop
+  -- Three prompts so far, so three plus five files are allowed. Two are
+  -- already there from the setup (p.jpg and new.webp).
+  for i in 1..6 loop
     insert into storage.objects (bucket_id, name) values ('prompt-images', me || '/' || i || '.jpg');
   end loop;
   perform pg_temp.expect_error(format($f$insert into storage.objects (bucket_id, name) values ('prompt-images', %L)$f$, me || '/9.jpg'),

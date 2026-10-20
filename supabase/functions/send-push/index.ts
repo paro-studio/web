@@ -5,27 +5,14 @@
  *
  * How it is called:
  *
- *   - by three triggers, on insert into public.follows, public.likes and
- *     public.prompt_ratings. Like
- *     the moderation triggers they carry the shared secret, so they are
- *     created once in the SQL editor and are not in a migration:
- *
- *       create trigger push_on_follow
- *         after insert on public.follows
- *         for each row execute function supabase_functions.http_request(
- *           'https://<project ref>.supabase.co/functions/v1/send-push', 'POST',
- *           '{"Content-type":"application/json","x-webhook-secret":"<secret>"}',
- *           '{}', '10000');
- *
- *       create trigger push_on_like
- *         after insert on public.likes
- *         for each row execute function supabase_functions.http_request(
- *           ... the same five arguments ... );
- *
- *       create trigger push_on_rating
- *         after insert on public.prompt_ratings
- *         for each row execute function supabase_functions.http_request(
- *           ... the same five arguments ... );
+ *   - by three triggers, push_on_follow, push_on_like and push_on_rating,
+ *     after insert on public.follows, public.likes and public.prompt_ratings.
+ *     Each runs public.request_push() (migration 20261021010000), which
+ *     applies the rules below in the database first and only then calls this
+ *     function, with the address and secret it reads from Vault
+ *     (paro_functions_url and paro_webhook_secret). So liking and unliking in
+ *     a loop costs no function calls. The rules are applied here again all
+ *     the same: two calls racing each other must still not both send.
  *
  *     Insert only: changing the stars on a rating is an update, and does not
  *     notify again.

@@ -57,6 +57,13 @@ insert into storage.objects (bucket_id, name) values
   ('avatars', '22222222-2222-2222-2222-222222222222/avatar.jpg'),
   ('banners', '22222222-2222-2222-2222-222222222222/banner.jpg');
 
+-- The images the tests below post with: a prompt may only point at a file
+-- that has been uploaded (20261021010000).
+insert into storage.objects (bucket_id, name) values
+  ('prompt-images', '11111111-1111-1111-1111-111111111111/p.jpg'),
+  ('prompt-images', '11111111-1111-1111-1111-111111111111/x.jpg'),
+  ('prompt-images', '33333333-3333-3333-3333-333333333333/p.jpg');
+
 -- Runs one statement and fails the run unless it errors with the given code.
 create function pg_temp.expect_error(stmt text, code text, what text)
 returns void language plpgsql as $$
