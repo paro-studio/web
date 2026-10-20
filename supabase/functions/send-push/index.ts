@@ -1,10 +1,12 @@
 /**
  * send-push: sends a push notification to the mobile app when someone
- * follows a person, likes their prompt, or when a creator they follow posts.
+ * follows a person, likes or rates their prompt, or when a creator they
+ * follow posts.
  *
  * How it is called:
  *
- *   - by two triggers, on insert into public.follows and public.likes. Like
+ *   - by three triggers, on insert into public.follows, public.likes and
+ *     public.prompt_ratings. Like
  *     the moderation triggers they carry the shared secret, so they are
  *     created once in the SQL editor and are not in a migration:
  *
@@ -20,6 +22,14 @@
  *         for each row execute function supabase_functions.http_request(
  *           ... the same five arguments ... );
  *
+ *       create trigger push_on_rating
+ *         after insert on public.prompt_ratings
+ *         for each row execute function supabase_functions.http_request(
+ *           ... the same five arguments ... );
+ *
+ *     Insert only: changing the stars on a rating is an update, and does not
+ *     notify again.
+ *
  *   - by the moderate-prompt function, for a new prompt, once its image has
  *     been checked and left up. Followers are not told about a post that is
  *     about to be removed.
@@ -34,12 +44,12 @@
  *
  * Who is not told:
  *
- *   - yourself, about your own like or post
+ *   - yourself, about your own like, rating or post
  *   - someone who has blocked the person doing it
  *   - someone already told the same thing: unfollowing and following again,
  *     or unliking and liking again, does not buzz a second time. A prompt
- *     also sends at most one like notification every ten minutes, so a
- *     popular post is not twenty buzzes in a row
+ *     also sends at most one like notification, and one rating notification,
+ *     every ten minutes, so a popular post is not twenty buzzes in a row
  *
  * What was sent is recorded in notification_events, which is how the rules
  * above are checked. Delivery goes through Expo's push service; a phone it
@@ -56,12 +66,12 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 /** Expo accepts up to 100 messages per request. */
 const BATCH = 100;
-/** One like notification per prompt in this window. */
-const LIKE_QUIET_MS = 10 * 60 * 1000;
+/** One like, and one rating, notification per prompt in this window. */
+const QUIET_MS = 10 * 60 * 1000;
 /** Titles are cut to this in a notification body, which shows a line or two. */
 const BODY_MAX = 120;
 
-type Kind = "follow" | "like" | "new_prompt";
+type Kind = "follow" | "like" | "rating" | "new_prompt";
 
 /** One thing to tell some people about. */
 type Notice = {
@@ -150,6 +160,33 @@ async function noticeFor(admin: SupabaseClient, table: string, id: string): Prom
     };
   }
 
+  if (table === "prompt_ratings") {
+    const { data } = await admin
+      .from("prompt_ratings")
+      .select("user_id, prompt_id, rating")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return null;
+
+    const { data: prompt } = await admin
+      .from("prompts")
+      .select("user_id, title")
+      .eq("id", data.prompt_id)
+      .maybeSingle();
+    if (!prompt) return null;
+
+    const stars = Math.min(5, Math.max(1, Math.round(data.rating)));
+    return {
+      kind: "rating",
+      actorId: data.user_id,
+      promptId: data.prompt_id,
+      recipientIds: [prompt.user_id],
+      title: `${await nameOf(admin, data.user_id)} rated your prompt ${"★".repeat(stars)}${"☆".repeat(5 - stars)}`,
+      body: clip(prompt.title),
+      url: `/prompt/${data.prompt_id}`,
+    };
+  }
+
   if (table === "prompts") {
     const { data: prompt } = await admin
       .from("prompts")
@@ -205,15 +242,15 @@ async function whoToTell(admin: SupabaseClient, notice: Notice): Promise<string[
   recipients = recipients.filter((id) => !toldAlready.has(id));
   if (recipients.length === 0) return [];
 
-  // A prompt's likes are spaced out, whoever they come from.
-  if (notice.kind === "like" && notice.promptId) {
+  // A prompt's likes, and its ratings, are spaced out, whoever they come from.
+  if ((notice.kind === "like" || notice.kind === "rating") && notice.promptId) {
     const { data: recent } = await admin
       .from("notification_events")
       .select("recipient_id")
-      .eq("kind", "like")
+      .eq("kind", notice.kind)
       .eq("prompt_id", notice.promptId)
       .in("recipient_id", recipients)
-      .gte("created_at", new Date(Date.now() - LIKE_QUIET_MS).toISOString());
+      .gte("created_at", new Date(Date.now() - QUIET_MS).toISOString());
     const quiet = new Set((recent ?? []).map((row) => row.recipient_id));
     recipients = recipients.filter((id) => !quiet.has(id));
   }
