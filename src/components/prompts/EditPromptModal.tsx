@@ -48,6 +48,7 @@ export function EditPromptModal({
 }: EditPromptModalProps) {
   const [title, setTitle] = useState(prompt.title);
   const [promptText, setPromptText] = useState(prompt.prompt_text ?? "");
+  const [initialPromptText, setInitialPromptText] = useState(prompt.prompt_text ?? "");
   const [textLoading, setTextLoading] = useState(prompt.prompt_text === undefined);
   const [toolUsed, setToolUsed] = useState(prompt.tool_used);
   const [customTool, setCustomTool] = useState("");
@@ -74,6 +75,7 @@ export function EditPromptModal({
         return;
       }
       setPromptText(text);
+      setInitialPromptText(text);
       setTextLoading(false);
     });
     return () => { cancelled = true; };
@@ -116,6 +118,24 @@ export function EditPromptModal({
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields and select at least 3 tags",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (title !== prompt.title && title.length > 100) {
+      toast({
+        title: "Title too long",
+        description: "Please keep your title under 100 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (promptText !== initialPromptText && promptText.length > 15000) {
+      toast({
+        title: "Prompt too long",
+        description: "Please keep your prompt under 15000 characters",
         variant: "destructive",
       });
       return;
@@ -243,6 +263,7 @@ export function EditPromptModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter title"
+              maxLength={100}
               className="mt-1"
             />
           </div>
@@ -256,6 +277,7 @@ export function EditPromptModal({
               onChange={(e) => setPromptText(e.target.value)}
               placeholder={textLoading ? "Loading..." : "Enter your prompt"}
               disabled={textLoading}
+              maxLength={15000}
               rows={4}
               className="mt-1"
             />
