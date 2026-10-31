@@ -33,14 +33,24 @@ export interface PromptWithDetails {
   ratingCount?: number;
 }
 
+export const FEED_PAGE_SIZE = 50;
+
+// Sorting happens here rather than in the query, so a page is a slice of the
+// sorted rows. Every page has to slice the same list or prompts repeat and go
+// missing between pages, so early pages all share this many rows. Past this
+// many prompts, Trending and Most copied need sorting in the database (#143).
+const MIN_ROWS_TO_SORT = 200;
+
 export function usePrompts(options?: {
   selectedTags?: string[];
   searchQuery?: string;
   sortBy?: "trending" | "newest" | "most_copied";
   limit?: number;
+  page?: number;
 }) {
   const { user, sessionLoading } = useAuth();
-  const { selectedTags = [], searchQuery = "", sortBy = "trending", limit = 50 } = options || {};
+  const { selectedTags = [], searchQuery = "", sortBy = "trending", limit = FEED_PAGE_SIZE, page = 1 } = options || {};
+  const rowsToFetch = Math.max(page * limit * 2, MIN_ROWS_TO_SORT);
 
   const trimmedQuery = searchQuery.trim();
   const isSearch = Boolean(trimmedQuery || selectedTags.length > 0);
@@ -72,26 +82,26 @@ export function usePrompts(options?: {
             return score(b) - score(a);
           }
         })
-        .slice(0, limit);
+        .slice((page - 1) * limit, page * limit);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tagsKey, sortBy, limit]
+    [tagsKey, sortBy, limit, page]
   );
 
-  return useQuery({
+  const feedQuery = {
     // The user id is in the key because isLiked and isSaved depend on it.
     // When searching, include query and tags in the key to fetch via searchPrompts.
     queryKey: isSearch
-      ? ["prompts", "search", trimmedQuery, tagsKey, limit, user?.id ?? null]
-      : promptsQueryKey(limit, user?.id),
+      ? ["prompts", "search", trimmedQuery, tagsKey, rowsToFetch, user?.id ?? null]
+      : promptsQueryKey(rowsToFetch, user?.id),
     queryFn: async () => {
       const { prompts: allPrompts, error } = isSearch
         ? await searchPrompts({
             query: trimmedQuery || undefined,
             tags: selectedTags.length > 0 ? selectedTags : undefined,
-            limit: limit * 2,
+            limit: rowsToFetch,
           })
-        : await getAllPrompts(limit * 2);
+        : await getAllPrompts(rowsToFetch);
 
       if (error) throw error;
 
@@ -145,13 +155,24 @@ export function usePrompts(options?: {
 
       return enrichedPrompts;
     },
-    select: selectFeed,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData: PromptWithDetails[] | undefined) => previousData,
     // Waits only for the stored session, which is read locally. Waiting on the
     // profile fetch as well held the whole feed back behind two extra round
     // trips it does not need.
     enabled: !sessionLoading,
+  };
+
+  const query = useQuery({ ...feedQuery, select: selectFeed });
+  const { data: rowCount = 0 } = useQuery({
+    ...feedQuery,
+    select: (rows: PromptWithDetails[]) => rows.length,
   });
+
+  return {
+    ...query,
+    hasNextPage: rowCount > page * limit,
+    totalRows: rowCount,
+  };
 }
 
 export function useTopCreators(limit = 6) {

@@ -91,7 +91,7 @@ const clip = (text: string, max = FIELD_MAX) =>
  * [Open in dashboard](https://somewhere.else) that looks like part of the
  * alert to the person moderating.
  */
-const plain = (text: string) => text.replace(/([\\\[\]()*_~`>|])/g, "\\$1");
+const plain = (text: string) => text.replace(/([\\[\]()*_~`>|])/g, "\\$1");
 
 // Usernames are letters, digits and underscores, so only the underscore
 // needs care. A display name is free text.

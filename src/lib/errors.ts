@@ -16,3 +16,12 @@ export function getErrorMessage(error: unknown, fallback = "Unknown error"): str
 
   return fallback;
 }
+
+/**
+ * True when a lookup failed because the row can't exist, not because loading
+ * went wrong: no rows matched (PGRST116), or the id in the URL isn't a valid
+ * uuid at all (22P02). Those are "not found", and retrying can't change them.
+ */
+export function isMissingRowError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === "PGRST116" || error?.code === "22P02";
+}

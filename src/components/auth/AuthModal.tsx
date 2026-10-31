@@ -8,8 +8,15 @@ import { Chrome } from "lucide-react";
 interface AuthModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  defaultMode?: "login" | "signup";
+  /** "action": opened by trying to do something that needs an account. */
+  defaultMode?: "login" | "signup" | "action";
 }
+
+const COPY = {
+  login: { title: "Welcome back", subtitle: "Sign in to your account" },
+  signup: { title: "Join PARO", subtitle: "Create an account to start sharing prompts" },
+  action: { title: "Sign in to continue", subtitle: "Copy, like, save and post prompts with a free account" },
+};
 
 export function AuthModal({ open, onOpenChange, defaultMode = "login" }: AuthModalProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -37,12 +44,10 @@ export function AuthModal({ open, onOpenChange, defaultMode = "login" }: AuthMod
       <DialogContent className="sm:max-w-md border-border/50">
         <DialogHeader className="text-center pb-4">
           <DialogTitle className="font-serif text-2xl font-normal">
-            {defaultMode === "login" ? "Welcome back" : "Join PARO"}
+            {COPY[defaultMode].title}
           </DialogTitle>
           <p className="text-sm text-muted-foreground mt-2">
-            {defaultMode === "login"
-              ? "Sign in to your account"
-              : "Create an account to start sharing prompts"}
+            {COPY[defaultMode].subtitle}
           </p>
         </DialogHeader>
 
