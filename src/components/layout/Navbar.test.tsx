@@ -35,6 +35,16 @@ describe("Navbar Dropdown Menus", () => {
     expect(avatars.length).toBeGreaterThan(0);
   });
 
+  it("does not spend the header on PARO Originals, which is still coming soon", () => {
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("link", { name: /paro originals/i })).not.toBeInTheDocument();
+  });
+
   // The desktop menu is only about your account. Create and GitHub are
   // already in the navbar, and the site links moved to the footer.
   it("keeps the desktop dropdown to account items, headed by who is signed in", () => {

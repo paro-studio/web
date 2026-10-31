@@ -27,6 +27,7 @@ import { getLikeCount, getLikeCounts, getLikedPromptIds, isLiked as checkIsLiked
 import { getSavedPromptIds, isSaved as checkIsSaved } from "@/services/supabase/saves";
 import { getPromptRating, getPromptRatings, getUserPromptRating } from "@/services/supabase/ratings";
 import { recordViewIfEligible } from "@/lib/viewTracking";
+import { isMissingRowError } from "@/lib/errors";
 
 type PromptDetailData = PromptWithDetails & { userRating?: number | null };
 
@@ -66,7 +67,7 @@ export default function PromptDetail() {
       const { prompt: data, error } = await getPrompt(id);
       
       if (error) {
-        if (error.code === 'PGRST116') {
+        if (isMissingRowError(error)) {
           return null;
         }
         console.error('Error fetching prompt:', error);
@@ -666,10 +667,12 @@ export default function PromptDetail() {
         {recommendations && recommendations.length > 0 && (
           <section className="border-t border-border py-4 sm:py-6 lg:py-8 mt-2 sm:mt-4">
             <div className="px-4 sm:px-5 lg:px-6 xl:px-8">
-              <div className="max-w-[1920px] mx-auto">
+              <div className="max-w-[1400px] mx-auto">
                 <h2 className="font-serif text-lg sm:text-xl mb-3 sm:mb-4">More like this</h2>
 
-                <div className="masonry-grid">
+                {/* A grid, not .masonry-grid: there are only four of these, and
+                    six columns left them bunched into the left third. */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-6 items-start">
                   {recommendations.map((rec) => (
                     <PromptCard
                       key={rec.id}
@@ -701,7 +704,7 @@ export default function PromptDetail() {
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
-        defaultMode="login"
+        defaultMode="action"
       />
 
       {prompt && (
