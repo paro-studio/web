@@ -28,8 +28,12 @@ import { getSavedPromptIds, isSaved as checkIsSaved } from "@/services/supabase/
 import { getPromptRating, getPromptRatings, getUserPromptRating } from "@/services/supabase/ratings";
 import { recordViewIfEligible } from "@/lib/viewTracking";
 import { isMissingRowError } from "@/lib/errors";
+import { rankRelatedPrompts } from "@/lib/relatedPrompts";
 
 type PromptDetailData = PromptWithDetails & { userRating?: number | null };
+
+const RELATED_COUNT = 6;
+const RELATED_CANDIDATES = 200;
 
 export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
@@ -161,16 +165,13 @@ export default function PromptDetail() {
     queryFn: async () => {
       if (!prompt?.tags || prompt.tags.length === 0 || !id) return [];
 
-      // Get related prompts from Supabase
-      const { prompts: relatedPrompts, error: relatedError } = await getAllPrompts(50);
-      
+      const { prompts: relatedPrompts, error: relatedError } = await getAllPrompts(RELATED_CANDIDATES);
+
       if (relatedError) {
         console.error('Error fetching related prompts:', relatedError);
       }
-      
-      const filteredRelated = (relatedPrompts || [])
-        .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
-        .slice(0, 6);
+
+      const filteredRelated = rankRelatedPrompts({ id, tags: prompt.tags }, relatedPrompts, RELATED_COUNT);
 
       // Five queries for all of them, rather than requests from every card.
       const relatedIds = filteredRelated.map((p) => p.id);
