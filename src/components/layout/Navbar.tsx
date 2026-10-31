@@ -127,8 +127,31 @@ export function Navbar({ onSearch, searchQuery = "", sortBy, onSortChange, showF
               </span>
             </Link>
 
+            {/* Tablet Only - PARO Originals between logo and search */}
+            <div className="hidden md:flex lg:hidden items-center">
+              <Link
+                to="/originals"
+                className="group relative inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-gold/20 to-gold/10 hover:from-gold/30 hover:to-gold/20 transition-all duration-300"
+              >
+                <Sparkles className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-gold" />
+                <span className="text-xs tracking-editorial uppercase text-foreground dark:text-gold font-medium whitespace-nowrap">
+                  PARO Originals
+                </span>
+              </Link>
+            </div>
+
             {/* Desktop Navigation */}
             <div className=" hidden lg:flex items-center gap-4 xl:gap-8">
+              <Link
+                to="/originals"
+                className="group relative inline-flex items-center gap-2 px-3 xl:px-4 py-2 rounded-full bg-gradient-to-r from-gold/20 to-gold/10 hover:from-gold/30 hover:to-gold/20 transition-all duration-300"
+              >
+                <Sparkles className="h-4 w-4 text-gold" />
+                <span className="text-sm tracking-editorial uppercase text-foreground dark:text-gold font-medium whitespace-nowrap">
+                  PARO Originals
+                </span>
+              </Link>
+
               {/* Search - Flexible width */}
               <form onSubmit={handleSearchSubmit} className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
