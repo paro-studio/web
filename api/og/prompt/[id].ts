@@ -15,6 +15,10 @@ const TEXT_WIDTH = WIDTH - MARGIN - IMAGE_MAX_WIDTH - GAP - 64;
 
 // Rendered once, then served from the CDN. Short enough that a removed prompt
 // drops out soon, and the stale window keeps popular links fast.
+// Vercel kills the function at 10s (vercel.json), and then no fallback can run.
+// All downloads share this budget, leaving the rest for layout and encoding.
+const NETWORK_BUDGET_MS = 7000;
+
 const CACHE = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
 
 const COLORS = {
@@ -52,14 +56,14 @@ const NOTO_FONTS: Record<string, string> = {
   "zh-TW": "Noto Sans TC",
 };
 
-async function loadAdditionalAsset(languageCode: string, segment: string) {
+async function loadAdditionalAsset(languageCode: string, segment: string, signal: AbortSignal) {
   try {
     if (languageCode === "emoji") {
       const codePoints = [...segment]
         .map((char) => char.codePointAt(0)!.toString(16))
         .filter((code) => code !== "fe0f")
         .join("-");
-      const response = await fetch(`https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/${codePoints}.svg`);
+      const response = await fetch(`https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/${codePoints}.svg`, { signal });
       if (!response.ok) return "";
       const svg = Buffer.from(await response.arrayBuffer()).toString("base64");
       return `data:image/svg+xml;base64,${svg}`;
@@ -68,11 +72,12 @@ async function loadAdditionalAsset(languageCode: string, segment: string) {
     // Satori can pass several guesses, like "ja-JP|ko-KR|zh-CN", for shared characters.
     const name = NOTO_FONTS[languageCode.split("|")[0]] ?? "Noto Sans";
     const css = await fetch(
-      `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}&text=${encodeURIComponent(segment)}`
+      `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}&text=${encodeURIComponent(segment)}`,
+      { signal }
     ).then((response) => response.text());
     const fontUrl = css.match(/src: url\((.+?)\)/)?.[1];
     if (!fontUrl) return [];
-    const font = await fetch(fontUrl);
+    const font = await fetch(fontUrl, { signal });
     if (!font.ok) return [];
     // Unique names: each download only holds these characters, and fonts sharing
     // a name would hide each other.
@@ -90,8 +95,8 @@ function titleSize(title: string): number {
 }
 
 /** The whole picture, never cropped, as a JPEG the renderer can read (it can't read WebP). */
-async function promptImage(url: string) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+async function promptImage(url: string, deadline: AbortSignal) {
+  const response = await fetch(url, { signal: AbortSignal.any([deadline, AbortSignal.timeout(5000)]) });
   if (!response.ok) throw new Error(`Image responded ${response.status}`);
 
   const { data, info } = await sharp(Buffer.from(await response.arrayBuffer()))
@@ -104,9 +109,9 @@ async function promptImage(url: string) {
   return { src: `data:image/jpeg;base64,${data.toString("base64")}`, width: info.width, height: info.height };
 }
 
-async function renderCard(prompt: PromptPreview): Promise<Buffer> {
+async function renderCard(prompt: PromptPreview, deadline: AbortSignal): Promise<Buffer> {
   const [picture, logo, playfair, inter, interMedium] = await Promise.all([
-    promptImage(prompt.imageUrl),
+    promptImage(prompt.imageUrl, deadline),
     asset("_assets/logo.png"),
     asset("_fonts/playfair-display-latin-500-normal.woff"),
     asset("_fonts/inter-latin-400-normal.woff"),
@@ -193,7 +198,8 @@ async function renderCard(prompt: PromptPreview): Promise<Buffer> {
       { name: "Inter", data: inter, weight: 400, style: "normal" },
       { name: "Inter", data: interMedium, weight: 500, style: "normal" },
     ],
-    loadAdditionalAsset,
+    // Past the deadline these give up, and the card renders without those characters.
+    loadAdditionalAsset: (languageCode, segment) => loadAdditionalAsset(languageCode, segment, deadline),
   });
 
   // WhatsApp can skip large images, so a compressed JPEG rather than a PNG.
@@ -209,11 +215,13 @@ export async function GET(request: Request): Promise<Response> {
   const env = supabaseEnv(process.env);
   if (!env || !isUuid(id)) return fallback();
 
+  const deadline = AbortSignal.timeout(NETWORK_BUDGET_MS);
+
   try {
-    const prompt = await fetchPromptPreview(env, id, AbortSignal.timeout(3000));
+    const prompt = await fetchPromptPreview(env, id, AbortSignal.any([deadline, AbortSignal.timeout(3000)]));
     if (!prompt || !isOwnImage(env, prompt.imageUrl)) return fallback();
 
-    const card = await renderCard(prompt);
+    const card = await renderCard(prompt, deadline);
     return new Response(new Uint8Array(card), { headers: { "Content-Type": "image/jpeg", "Cache-Control": CACHE } });
   } catch (error) {
     console.error("Could not build preview card:", error);
