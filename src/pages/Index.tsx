@@ -8,8 +8,9 @@ import { STANDARD_TAGS } from "@/lib/standardTags";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { FeedCard } from "@/components/feed";
+import { FeedPagination } from "@/components/feed/FeedPagination";
 import { TagFilter } from "@/components/prompts/TagFilter";
-import { usePrompts } from "@/hooks/usePrompts";
+import { FEED_PAGE_SIZE, usePrompts } from "@/hooks/usePrompts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { FeedItem, toImageFeedItem, injectAdvertisements } from "@/lib/feedTypes";
@@ -34,6 +35,9 @@ export default function Index() {
     () => [...new Set(searchParams.getAll("tag"))],
     [searchParams]
   );
+  // In the URL for the same reason, and so browser back steps through pages.
+  const pageParam = Number(searchParams.get("page"));
+  const page = Number.isInteger(pageParam) && pageParam > 1 ? pageParam : 1;
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -56,10 +60,11 @@ export default function Index() {
     navigate(pending, { replace: true });
   }, [authLoading, user, navigate]);
 
-  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch } = usePrompts({
+  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch, hasNextPage, totalRows } = usePrompts({
     selectedTags,
     searchQuery,
     sortBy,
+    page,
   });
 
   // Always use fixed predefined tags - never changes based on user uploads
@@ -74,6 +79,7 @@ export default function Index() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("tag");
+    nextParams.delete("page");
 
     nextTags.forEach((selectedTag) => {
       nextParams.append("tag", selectedTag);
@@ -85,6 +91,7 @@ export default function Index() {
   const handleClearTags = () => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("tag");
+    nextParams.delete("page");
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -92,6 +99,7 @@ export default function Index() {
     const nextParams = new URLSearchParams(searchParams);
     if (query) nextParams.set("q", query);
     else nextParams.delete("q");
+    nextParams.delete("page");
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -100,7 +108,18 @@ export default function Index() {
     // Trending is the default, so it keeps the URL clean.
     if (sort === "trending") nextParams.delete("sort");
     else nextParams.set("sort", sort);
+    nextParams.delete("page");
     setSearchParams(nextParams, { replace: true });
+  };
+
+  const goToPage = (nextPage: number) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextPage > 1) nextParams.set("page", String(nextPage));
+    else nextParams.delete("page");
+    // ScrollManager keeps its place on same-path changes, which suits tags and
+    // search. A new page of prompts should start from the top.
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    setSearchParams(nextParams);
   };
 
   // Convert prompts to FeedItem format and prepare for future ad injection
@@ -192,7 +211,16 @@ export default function Index() {
                   </div>
                 ))}
               </div>
-            ) : isError && !prompts ? null : displayPrompts.length === 0 ? (
+            ) : isError && !prompts ? null : displayPrompts.length === 0 && page > 1 ? (
+              <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
+                <p className="font-serif text-lg sm:text-xl text-muted-foreground">
+                  There's nothing on this page
+                </p>
+                <Button variant="outline" size="sm" onClick={() => goToPage(1)} className="mt-4">
+                  Back to the first page
+                </Button>
+              </div>
+            ) : displayPrompts.length === 0 ? (
               searchQuery.trim() || selectedTags.length > 0 ? (
                 <div className="text-center py-12 sm:py-16 max-w-md mx-auto">
                   <p className="font-serif text-lg sm:text-xl text-muted-foreground">
@@ -210,6 +238,7 @@ export default function Index() {
                       const nextParams = new URLSearchParams(searchParams);
                       nextParams.delete("q");
                       nextParams.delete("tag");
+                      nextParams.delete("page");
                       setSearchParams(nextParams, { replace: true });
                     }}
                     className="mt-4"
@@ -237,9 +266,19 @@ export default function Index() {
                 </div>
               )
             ) : (
-              <div className="masonry-grid">
-                {renderFeed()}
-              </div>
+              <>
+                <div className="masonry-grid">
+                  {renderFeed()}
+                </div>
+                {(page > 1 || hasNextPage) && (
+                  <FeedPagination
+                    page={page}
+                    pageSize={FEED_PAGE_SIZE}
+                    totalRows={totalRows}
+                    onPageChange={goToPage}
+                  />
+                )}
+              </>
             )}
           </div>
         </section>
