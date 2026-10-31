@@ -228,3 +228,6 @@ export async function GET(request: Request): Promise<Response> {
     return fallback();
   }
 }
+
+// Some apps send a HEAD first to check an image before downloading it.
+export const HEAD = GET;
