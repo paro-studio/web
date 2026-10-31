@@ -7,15 +7,18 @@ import Index from "./Index";
 let mockPrompts: unknown[] = [];
 let mockLoading = false;
 let mockHasNextPage = false;
+let mockTotalRows = 1;
 let requestedPage: number | undefined;
 
 vi.mock("@/hooks/usePrompts", () => ({
+  FEED_PAGE_SIZE: 50,
   usePrompts: (options: { page?: number }) => {
     requestedPage = options.page;
     return {
       data: mockPrompts,
       isLoading: mockLoading,
       hasNextPage: mockHasNextPage,
+      totalRows: mockTotalRows,
     };
   },
 }));
@@ -109,6 +112,7 @@ describe("Index Page pagination", () => {
     mockPrompts = [prompt];
     mockLoading = false;
     mockHasNextPage = false;
+    mockTotalRows = 1;
     window.scrollTo = vi.fn();
   });
 
@@ -120,22 +124,35 @@ describe("Index Page pagination", () => {
 
   it("moves to the next page through the URL and back to the top of the page", () => {
     mockHasNextPage = true;
+    mockTotalRows = 92;
     renderIndex();
 
-    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Previous page" })).toHaveClass("invisible");
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
 
     expect(screen.getByTestId("url")).toHaveTextContent("?page=2");
     expect(requestedPage).toBe(2);
-    expect(screen.getByText("Page 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: "instant" });
   });
 
-  it("disables Next on the last page and drops the param going back to page one", () => {
+  it("jumps straight to a numbered page", () => {
+    mockHasNextPage = true;
+    mockTotalRows = 92;
+    renderIndex();
+
+    fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+    expect(screen.getByTestId("url")).toHaveTextContent("?page=2");
+    expect(screen.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("hides Next on the last page and drops the param going back to page one", () => {
+    mockTotalRows = 92;
     renderIndex(["/?page=2"]);
 
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    expect(screen.getByRole("button", { name: "Next page" })).toHaveClass("invisible");
+    fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
 
     expect(screen.getByTestId("url")).toBeEmptyDOMElement();
     expect(requestedPage).toBe(1);

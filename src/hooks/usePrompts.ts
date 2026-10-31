@@ -168,7 +168,11 @@ export function usePrompts(options?: {
     select: (rows: PromptWithDetails[]) => rows.length,
   });
 
-  return { ...query, hasNextPage: rowCount > page * limit };
+  return {
+    ...query,
+    hasNextPage: rowCount > page * limit,
+    totalRows: rowCount,
+  };
 }
 
 export function useTopCreators(limit = 6) {

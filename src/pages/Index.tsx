@@ -8,8 +8,9 @@ import { STANDARD_TAGS } from "@/lib/standardTags";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { FeedCard } from "@/components/feed";
+import { FeedPagination } from "@/components/feed/FeedPagination";
 import { TagFilter } from "@/components/prompts/TagFilter";
-import { usePrompts } from "@/hooks/usePrompts";
+import { FEED_PAGE_SIZE, usePrompts } from "@/hooks/usePrompts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { FeedItem, toImageFeedItem, injectAdvertisements } from "@/lib/feedTypes";
@@ -59,7 +60,7 @@ export default function Index() {
     navigate(pending, { replace: true });
   }, [authLoading, user, navigate]);
 
-  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch, hasNextPage } = usePrompts({
+  const { data: prompts, isLoading: promptsLoading, isError, isFetching, refetch, hasNextPage, totalRows } = usePrompts({
     selectedTags,
     searchQuery,
     sortBy,
@@ -283,15 +284,12 @@ export default function Index() {
                   {renderFeed()}
                 </div>
                 {(page > 1 || hasNextPage) && (
-                  <nav aria-label="Feed pages" className="flex items-center justify-center gap-3 sm:gap-4 mt-8 sm:mt-10">
-                    <Button variant="outline" size="sm" onClick={() => goToPage(page - 1)} disabled={page === 1}>
-                      Previous
-                    </Button>
-                    <span className="text-sm text-muted-foreground" aria-current="page">Page {page}</span>
-                    <Button variant="outline" size="sm" onClick={() => goToPage(page + 1)} disabled={!hasNextPage}>
-                      Next
-                    </Button>
-                  </nav>
+                  <FeedPagination
+                    page={page}
+                    pageSize={FEED_PAGE_SIZE}
+                    totalRows={totalRows}
+                    onPageChange={goToPage}
+                  />
                 )}
               </>
             )}
