@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getErrorMessage } from "./errors";
+import { getErrorMessage, isMissingRowError } from "./errors";
 
 describe("getErrorMessage", () => {
   it("unwraps a real Error", () => {
@@ -52,5 +52,15 @@ describe("getErrorMessage", () => {
     expect(getErrorMessage(new StorageError("bucket missing"))).toBe(
       "bucket missing",
     );
+  });
+});
+
+describe("isMissingRowError", () => {
+  it.each(["PGRST116", "22P02"])("treats %s as a missing row", (code) => {
+    expect(isMissingRowError({ code })).toBe(true);
+  });
+
+  it.each([{ code: "503" }, { code: undefined }, null, undefined])("does not treat %j as missing", (error) => {
+    expect(isMissingRowError(error)).toBe(false);
   });
 });

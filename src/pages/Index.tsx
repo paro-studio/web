@@ -140,19 +140,6 @@ export default function Index() {
       />
 
       <main className="flex-1 pt-14 sm:pt-16 lg:pt-20">
-        {/* Mobile: PARO Originals (replaces Browse by tags) */}
-        <section className="md:hidden px-4 py-4 sm:py-6">
-          <Link
-            to="/originals"
-            className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[hsl(var(--gold))]/10 to-transparent border border-[hsl(var(--gold))]/20 hover:border-[hsl(var(--gold))]/40 transition-all"
-          >
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Sparkles className="h-4 sm:h-5 w-4 sm:w-5 text-[hsl(var(--gold))]" />
-              <span className="font-serif text-base sm:text-lg">PARO Originals</span>
-            </div>
-            <span className="text-xs sm:text-sm text-muted-foreground">Coming Soon</span>
-          </Link>
-        </section>
 
         {/* Tablet & Desktop: Tag Filter Section */}
         <section className="hidden md:block px-4 lg:px-6 xl:px-8 py-4 lg:py-6 xl:py-8">
@@ -186,7 +173,7 @@ export default function Index() {
         </section>
 
         {/* Main Prompt Feed */}
-        <section className="px-4 sm:px-5 lg:px-6 xl:px-8 py-4 sm:py-6 lg:py-8 border-t border-border">
+        <section className="px-4 sm:px-5 lg:px-6 xl:px-8 py-4 sm:py-6 lg:py-8 md:border-t border-border">
           <div className="max-w-[1920px] mx-auto">
             <h2 className="font-serif text-xl sm:text-2xl mb-4 sm:mb-6">
               {sortBy === "trending" && "Trending Prompts"}
@@ -263,7 +250,7 @@ export default function Index() {
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
-        defaultMode="login"
+        defaultMode="action"
       />
     </div>
   );

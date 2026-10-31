@@ -27,6 +27,7 @@ import { getLikeCount, getLikeCounts, getLikedPromptIds, isLiked as checkIsLiked
 import { getSavedPromptIds, isSaved as checkIsSaved } from "@/services/supabase/saves";
 import { getPromptRating, getPromptRatings, getUserPromptRating } from "@/services/supabase/ratings";
 import { recordViewIfEligible } from "@/lib/viewTracking";
+import { isMissingRowError } from "@/lib/errors";
 
 type PromptDetailData = PromptWithDetails & { userRating?: number | null };
 
@@ -66,7 +67,7 @@ export default function PromptDetail() {
       const { prompt: data, error } = await getPrompt(id);
       
       if (error) {
-        if (error.code === 'PGRST116') {
+        if (isMissingRowError(error)) {
           return null;
         }
         console.error('Error fetching prompt:', error);
@@ -169,7 +170,7 @@ export default function PromptDetail() {
       
       const filteredRelated = (relatedPrompts || [])
         .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
-        .slice(0, 4);
+        .slice(0, 6);
 
       // Five queries for all of them, rather than requests from every card.
       const relatedIds = filteredRelated.map((p) => p.id);
@@ -666,10 +667,13 @@ export default function PromptDetail() {
         {recommendations && recommendations.length > 0 && (
           <section className="border-t border-border py-4 sm:py-6 lg:py-8 mt-2 sm:mt-4">
             <div className="px-4 sm:px-5 lg:px-6 xl:px-8">
-              <div className="max-w-[1920px] mx-auto">
+              <div className="max-w-[1400px] mx-auto">
                 <h2 className="font-serif text-lg sm:text-xl mb-3 sm:mb-4">More like this</h2>
 
-                <div className="masonry-grid">
+                {/* A grid, not .masonry-grid: CSS columns bunch a short list to the
+                    left. Sized like feed cards. Four columns would leave an
+                    uneven second row, so they only show the first four. */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 lg:gap-6 items-start md:[&>*:nth-child(n+5)]:hidden xl:[&>*:nth-child(n+5)]:block">
                   {recommendations.map((rec) => (
                     <PromptCard
                       key={rec.id}
@@ -701,7 +705,7 @@ export default function PromptDetail() {
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
-        defaultMode="login"
+        defaultMode="action"
       />
 
       {prompt && (

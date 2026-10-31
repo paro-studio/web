@@ -161,6 +161,16 @@ describe("Profile Page", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("renders 'Profile not found' for an id that isn't a valid uuid (22P02)", async () => {
+    currentProfileData = null;
+    currentProfileError = { code: "22P02", message: "invalid input syntax for type uuid" };
+
+    renderProfile();
+
+    expect(await screen.findByText("Profile not found")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("renders QueryError and allows retry when profile load fails due to network/database error", async () => {
     currentProfileData = null;
     currentProfileError = { code: "503", message: "Database connection failed" };

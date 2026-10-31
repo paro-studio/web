@@ -209,6 +209,16 @@ describe("PromptDetail", () => {
     expect(screen.getByTitle("Likes")).toHaveTextContent("7");
   });
 
+  it("renders 'Prompt not found' for an id that isn't a valid uuid (22P02)", async () => {
+    currentPromptData = null;
+    currentPromptError = { code: "22P02", message: "invalid input syntax for type uuid" };
+
+    renderPromptDetail();
+
+    expect(await screen.findByText("Prompt not found")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("renders 'Prompt not found' when prompt does not exist (PGRST116)", async () => {
     currentPromptData = null;
     currentPromptError = { code: "PGRST116", message: "No rows found" };
