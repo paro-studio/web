@@ -5,6 +5,13 @@
       "gh-readonly-queue/**": false
     }
   },
+  "functions": {
+    "api/og/prompt/[id].ts": {
+      "includeFiles": "api/_*/**",
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -52,7 +59,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|\\.well-known/).*)",
+      "source": "/((?!assets/|api/|\\.well-known/).*)",
       "destination": "/index.html"
     }
   ]
