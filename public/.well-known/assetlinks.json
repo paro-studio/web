@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "in.parostudios.app",
       "sha256_cert_fingerprints": [
-        "0F:FE:9C:61:7B:C4:B6:1D:29:2C:F9:FE:5B:50:56:FF:83:79:FC:2B:56:A8:E6:98:2F:20:51:EF:5C:4C:67:AE"
+        "0F:FE:9C:61:7B:C4:B6:1D:29:2C:F9:FE:5B:50:56:FF:83:79:FC:2B:56:A8:E6:98:2F:20:51:EF:5C:4C:67:AE",
+        "D1:47:22:18:3C:33:38:EF:00:CA:50:55:47:00:4C:7D:CF:CB:44:8E:C7:7B:65:23:9A:BA:76:E1:39:24:65:77"
       ]
     }
   }

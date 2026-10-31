@@ -3,10 +3,11 @@ import { Footer } from "@/components/layout/Footer";
 import { Link } from "react-router-dom";
 import { Lock } from "lucide-react";
 
-// Where people reach the team. Add the support email here once there is one.
+// Where people reach the team.
 export const DISCORD_URL = "https://discord.com/invite/zNZ3TAwy73";
+export const SUPPORT_EMAIL = "parostudio2026@gmail.com";
 
-export const PRIVACY_UPDATED = "1 October 2026";
+export const PRIVACY_UPDATED = "21 October 2026";
 
 interface PolicySection {
   title: string;
@@ -33,8 +34,10 @@ const SECTIONS: PolicySection[] = [
       "Your Google account's email address, name and profile photo, when you sign in with Google. Google is the only way to sign in.",
       "What you add to your profile: your username, display name, bio, profile photo and banner.",
       "What you post: each prompt's image, title, prompt text, AI tool and tags.",
-      "What you do: the prompts you like, save and rate, the people you follow, and the prompts you report or feedback you send.",
+      "What you do: the prompts you like, save and rate, the people you follow, the accounts you block, and the prompts or accounts you report or feedback you send.",
+      "What you type into search, sent so the search can run. It is not saved on our side.",
       "Counts of views and copies. When you are signed out, a view is counted against a one way hash of your IP address, never the address itself. When you are signed in, it is counted against your account. These records are deleted after two days.",
+      "If you turn on notifications in the app: an address for your phone, called a push token, so a notification can reach it. It is tied to your account, and removed when you turn notifications off, sign out or delete your account.",
       "Crash and error reports from the app: what went wrong and where in the code, your phone's model and Android version, and the last few screens you opened. Never your email or anything you posted.",
     ],
   },
@@ -54,6 +57,7 @@ const SECTIONS: PolicySection[] = [
     items: [
       "Your email address. It is never shown to anyone.",
       "Your saved prompts. Only you can see them.",
+      "Who you have blocked. Only you can see that, and the other person is not told.",
       "Your reports and feedback. Only the Paro team can read them.",
     ],
   },
@@ -61,6 +65,8 @@ const SECTIONS: PolicySection[] = [
     title: "How we use it",
     paragraphs: [
       "To run Paro: to sign you in, show your profile and prompts, count views and copies, keep to the daily posting limit, and look into reports.",
+      "To keep Paro safe: every new prompt's image, title, prompt text and tags are checked automatically for content that breaks the community guidelines. A prompt that fails the check is removed, and one that is unclear is looked at by the Paro team.",
+      "If notifications are on, to tell you about a new follower, a like or a rating on your prompt, or a new prompt from someone you follow. Nothing else is sent, and you can turn them off in Settings at any time.",
       "Crash reports are used only to find and fix problems in the app.",
       "We do not sell your data, show ads, or track you across other apps and websites.",
     ],
@@ -72,13 +78,22 @@ const SECTIONS: PolicySection[] = [
       "Google handles sign in.",
       "Vercel hosts the website.",
       "Sentry receives the app's crash and error reports.",
+      "Expo and Google deliver the app's notifications to your phone.",
+      "OpenAI runs the automatic check on new prompts. It receives the image, title, prompt text and tags, not your name or email.",
+      "Discord carries reports, feedback and flagged prompts to the Paro team's private channel, with the usernames involved.",
     ],
     paragraphs: ["They process data only to provide those services to us."],
   },
   {
+    title: "How it is protected",
+    paragraphs: [
+      "Everything travels between your device and our servers over an encrypted connection (HTTPS). The database only lets each person change their own profile, prompts and activity.",
+    ],
+  },
+  {
     title: "On your phone",
     paragraphs: [
-      "The app keeps a few things on your phone so it works well: your sign in, recently loaded and saved prompts so they open offline, an unfinished post as a draft, recent searches and your light or dark setting. Signing out removes your sign in, the saved prompts and the draft. Uninstalling the app removes all of it.",
+      "The app keeps a few things on your phone so it works well: your sign in, recently loaded and saved prompts so they open offline, an unfinished post as a draft, recent searches, your light or dark setting, and small notes such as having accepted the terms or which prompts you were asked to rate. Signing out removes your sign in, the saved prompts and the draft. Uninstalling the app removes all of it.",
     ],
   },
   {
@@ -96,7 +111,7 @@ const SECTIONS: PolicySection[] = [
   {
     title: "Children",
     paragraphs: [
-      "Paro is not meant for children under 13, and we do not knowingly collect their data.",
+      "Paro is for adults and is not meant for anyone under 18. We do not knowingly collect data from anyone under 18, and we delete an account if we learn it belongs to someone younger.",
     ],
   },
   {
@@ -147,11 +162,19 @@ export default function Privacy() {
             <section className="space-y-3">
               <h2 className="text-xl sm:text-2xl font-serif text-foreground">Contact</h2>
               <p className="text-muted-foreground leading-relaxed">
-                For anything about your data, reach the team on our{" "}
+                For anything about your data, email{" "}
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-gold underline underline-offset-4">
+                  {SUPPORT_EMAIL}
+                </a>{" "}
+                or reach the team on our{" "}
                 <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="text-gold underline underline-offset-4">
                   Discord
                 </a>
-                . To delete your account, see{" "}
+                . For a complaint, the{" "}
+                <Link to="/terms" className="text-gold underline underline-offset-4">
+                  terms of use
+                </Link>{" "}
+                name our grievance officer. To delete your account, see{" "}
                 <Link to="/delete-account" className="text-gold underline underline-offset-4">
                   how to delete your account
                 </Link>

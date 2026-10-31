@@ -16,7 +16,7 @@ vi.mock("@/services/supabase/client", () => ({
 }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
-async function show(mode: "login" | "signup" = "login") {
+async function show(mode: "login" | "signup" | "action" = "login") {
   const onOpenChange = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -40,6 +40,12 @@ describe("Google-only authentication", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     expect(screen.queryByText("Or continue with email")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /create account|^sign in$|sign up/i })).not.toBeInTheDocument();
+  });
+
+  it("does not greet someone as returning when an action asked them to sign in", async () => {
+    await show("action");
+    expect(screen.getByText("Sign in to continue")).toBeInTheDocument();
+    expect(screen.queryByText("Welcome back")).not.toBeInTheDocument();
   });
 
   it("starts Google OAuth with the existing return URL and preserves the pending route", async () => {

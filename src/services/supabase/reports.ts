@@ -10,6 +10,7 @@ export type ReportReason =
   | 'spam'
   | 'misleading'
   | 'inappropriate'
+  | 'impersonation'
   | 'copyright'
   | 'other';
 
@@ -28,6 +29,11 @@ export const REPORT_REASONS: { value: ReportReason; label: string; description: 
     value: 'inappropriate',
     label: 'Inappropriate',
     description: 'Offensive, harmful, or violates community guidelines',
+  },
+  {
+    value: 'impersonation',
+    label: 'Shows a real person',
+    description: 'Uses my image or someone else\'s without consent, or pretends to be them',
   },
   {
     value: 'copyright',

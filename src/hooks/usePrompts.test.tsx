@@ -73,6 +73,34 @@ describe("usePrompts", () => {
     expect(getAllPrompts).toHaveBeenCalledTimes(1);
   });
 
+  it("slices the sorted rows into pages, without fetching again between early pages", async () => {
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof usePrompts>[0]) => usePrompts(props),
+      { wrapper, initialProps: { limit: 1, page: 1 } }
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.map((p) => p.id)).toEqual(["b"]);
+    expect(result.current.hasNextPage).toBe(true);
+
+    rerender({ limit: 1, page: 2 });
+    expect(result.current.data?.map((p) => p.id)).toEqual(["c"]);
+    expect(result.current.hasNextPage).toBe(true);
+
+    rerender({ limit: 1, page: 3 });
+    expect(result.current.data?.map((p) => p.id)).toEqual(["a"]);
+    expect(result.current.hasNextPage).toBe(false);
+
+    expect(getAllPrompts).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches enough rows to reach pages past the shared window", async () => {
+    const { result } = renderHook(() => usePrompts({ page: 3 }), { wrapper });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(getAllPrompts).toHaveBeenCalledWith(300);
+  });
+
   it("queries searchPrompts using server-side search when searchQuery is provided", async () => {
     vi.mocked(searchPrompts).mockResolvedValue({ prompts: [rows[0]], error: null });
 
@@ -85,7 +113,7 @@ describe("usePrompts", () => {
     expect(searchPrompts).toHaveBeenCalledWith({
       query: "cyberpunk",
       tags: ["city"],
-      limit: 100,
+      limit: 200,
     });
     expect(result.current.data?.map((p) => p.id)).toEqual(["a"]);
   });
@@ -102,7 +130,7 @@ describe("usePrompts", () => {
     expect(searchPrompts).toHaveBeenCalledWith({
       query: undefined,
       tags: ["city"],
-      limit: 100,
+      limit: 200,
     });
     expect(result.current.data?.map((p) => p.id)).toEqual(["a"]);
   });

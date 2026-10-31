@@ -27,6 +27,12 @@ vi.mock("@/components/layout/Navbar", () => ({
   Navbar: () => <nav data-testid="navbar">Navbar</nav>,
 }));
 
+// The Delete account section imports this, which would create the real
+// Supabase client and fail without a .env. It is tested on its own.
+vi.mock("@/services/supabase/account", () => ({
+  deleteAccount: vi.fn(),
+}));
+
 vi.mock("@/components/layout/Footer", () => ({
   Footer: () => <footer data-testid="footer">Footer</footer>,
 }));

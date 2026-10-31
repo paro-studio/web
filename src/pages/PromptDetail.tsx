@@ -9,6 +9,7 @@ import { Eye, Copy, Heart, Bookmark, Check, ArrowLeft, Share2, Star } from "luci
 import { useAuth } from "@/hooks/useAuth";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { QueryError } from "@/components/QueryError";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,8 +27,13 @@ import { getLikeCount, getLikeCounts, getLikedPromptIds, isLiked as checkIsLiked
 import { getSavedPromptIds, isSaved as checkIsSaved } from "@/services/supabase/saves";
 import { getPromptRating, getPromptRatings, getUserPromptRating } from "@/services/supabase/ratings";
 import { recordViewIfEligible } from "@/lib/viewTracking";
+import { isMissingRowError } from "@/lib/errors";
+import { rankRelatedPrompts } from "@/lib/relatedPrompts";
 
 type PromptDetailData = PromptWithDetails & { userRating?: number | null };
+
+const RELATED_COUNT = 6;
+const RELATED_CANDIDATES = 200;
 
 export default function PromptDetail() {
   const { id } = useParams<{ id: string }>();
@@ -56,7 +62,7 @@ export default function PromptDetail() {
     }
   }, [id]);
 
-  const { data: prompt, isLoading } = useQuery<PromptDetailData | null>({
+  const { data: prompt, isLoading, isError, isFetching, refetch } = useQuery<PromptDetailData | null>({
     queryKey: ["prompt", id, user?.id],
     queryFn: async () => {
       if (!id) return null;
@@ -64,8 +70,15 @@ export default function PromptDetail() {
       // Get prompt from Supabase
       const { prompt: data, error } = await getPrompt(id);
       
-      if (error || !data) {
+      if (error) {
+        if (isMissingRowError(error)) {
+          return null;
+        }
         console.error('Error fetching prompt:', error);
+        throw error;
+      }
+
+      if (!data) {
         return null;
       }
 
@@ -152,16 +165,13 @@ export default function PromptDetail() {
     queryFn: async () => {
       if (!prompt?.tags || prompt.tags.length === 0 || !id) return [];
 
-      // Get related prompts from Supabase
-      const { prompts: relatedPrompts, error: relatedError } = await getAllPrompts(50);
-      
+      const { prompts: relatedPrompts, error: relatedError } = await getAllPrompts(RELATED_CANDIDATES);
+
       if (relatedError) {
         console.error('Error fetching related prompts:', relatedError);
       }
-      
-      const filteredRelated = (relatedPrompts || [])
-        .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
-        .slice(0, 4);
+
+      const filteredRelated = rankRelatedPrompts({ id, tags: prompt.tags }, relatedPrompts, RELATED_COUNT);
 
       // Five queries for all of them, rather than requests from every card.
       const relatedIds = filteredRelated.map((p) => p.id);
@@ -345,6 +355,24 @@ export default function PromptDetail() {
     );
   }
 
+  if (isError && !prompt) {
+    return (
+      <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+          <QueryError
+            resource="prompt"
+            onRetry={() => {
+              void refetch();
+            }}
+            retrying={isFetching}
+          />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   if (!prompt) {
     return (
       <div className="min-h-screen min-h-[100dvh] bg-background">
@@ -367,6 +395,15 @@ export default function PromptDetail() {
         {/* Main content section - compact to show recommendations without scroll */}
         <section className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6">
           <div className="max-w-[1400px] mx-auto">
+            {isError && (
+              <QueryError
+                resource="prompt"
+                onRetry={() => {
+                  void refetch();
+                }}
+                retrying={isFetching}
+              />
+            )}
             {/* Back button. A real history back when the visitor came from
                 inside the app, so the feed returns to where they were
                 scrolled. Linking to "/" opened the feed fresh, at the top.
@@ -569,7 +606,9 @@ export default function PromptDetail() {
                     </div>
                   </div>
 
-                  {/* Interactive Star Selection */}
+                  {/* Interactive Star Selection. Not on your own prompt: the
+                      database refuses a rating from its creator. */}
+                  {user?.id !== prompt.creator.id && (
                   <div className="pt-2 flex items-center justify-between border-t border-border/40 flex-wrap gap-2">
                     <div className="text-xs text-muted-foreground">
                       {userRating ? (
@@ -603,6 +642,7 @@ export default function PromptDetail() {
                       })}
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* Tags */}
@@ -628,10 +668,13 @@ export default function PromptDetail() {
         {recommendations && recommendations.length > 0 && (
           <section className="border-t border-border py-4 sm:py-6 lg:py-8 mt-2 sm:mt-4">
             <div className="px-4 sm:px-5 lg:px-6 xl:px-8">
-              <div className="max-w-[1920px] mx-auto">
+              <div className="max-w-[1400px] mx-auto">
                 <h2 className="font-serif text-lg sm:text-xl mb-3 sm:mb-4">More like this</h2>
 
-                <div className="masonry-grid">
+                {/* A grid, not .masonry-grid: CSS columns bunch a short list to the
+                    left. Sized like feed cards. Four columns would leave an
+                    uneven second row, so they only show the first four. */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 lg:gap-6 items-start md:[&>*:nth-child(n+5)]:hidden xl:[&>*:nth-child(n+5)]:block">
                   {recommendations.map((rec) => (
                     <PromptCard
                       key={rec.id}
@@ -663,7 +706,7 @@ export default function PromptDetail() {
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
-        defaultMode="login"
+        defaultMode="action"
       />
 
       {prompt && (

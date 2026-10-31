@@ -126,7 +126,7 @@ describe("Navbar Dropdown Menus", () => {
     expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
 
-  it("renders Support link pointing to support@parostudios.in in mobile dropdown", async () => {
+  it("renders Support link pointing to parostudio2026@gmail.com in mobile dropdown", async () => {
     const { container } = render(
       <MemoryRouter>
         <Navbar />
@@ -142,6 +142,6 @@ describe("Navbar Dropdown Menus", () => {
 
     const supportLink = screen.getByRole("menuitem", { name: /support/i });
     expect(supportLink).toBeDefined();
-    expect(supportLink.getAttribute("href")).toBe("mailto:support@parostudios.in");
+    expect(supportLink.getAttribute("href")).toBe("mailto:parostudio2026@gmail.com");
   });
 });

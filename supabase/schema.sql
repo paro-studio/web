@@ -1554,6 +1554,1662 @@ set follower_count = coalesce((select count(*) from public.follows f where f.fol
     following_count = coalesce((select count(*) from public.follows f where f.follower_id = pr.id), 0);
 
 -- --------------------------------------------------------------------------
+-- 20261003000000_user_reports_and_blocks.sql
+-- --------------------------------------------------------------------------
+
+-- Report a user and block a user.
+--
+-- Google Play expects an app where people post to offer both: a way to report
+-- a person, not only a single prompt, and a way to stop seeing someone. Until
+-- now only prompts could be reported (prompt_reports) and nobody could be
+-- blocked. The Android app is the first client; the website can follow.
+--
+-- user_reports  Same philosophy as prompt_reports and feedback: insert only,
+--               and only as yourself. There is deliberately no select policy,
+--               so nobody can read reports through the API, not even their
+--               own. Review them in the Supabase dashboard.
+--
+-- blocks        Private, like saves. You can read, add and remove only your
+--               own rows, so nobody can find out who has blocked them. A
+--               block is one way: it hides the blocked person's prompts from
+--               the blocker. The clients do the hiding, by leaving blocked
+--               creators out of their list queries. It does not stop the
+--               blocked person seeing public prompts, which anyone signed out
+--               can see anyway.
+--
+-- Both follow the convention from 20260907000000: every public table points
+-- at public.profiles (id) and deletes with it, so deleting an account removes
+-- the reports it made, the reports about it, and its blocks in both
+-- directions.
+--
+-- Clients may only send the columns listed in the grants. id and created_at
+-- are the database's to set, for the same reason created_at was locked on
+-- prompts and profiles in 20260922120000.
+
+-- ---------------------------------------------------------------------------
+-- user_reports
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.user_reports (
+  id          uuid        primary key default gen_random_uuid(),
+  user_id     uuid        not null references public.profiles (id) on delete cascade,
+  reported_id uuid        not null references public.profiles (id) on delete cascade,
+  reason      text        not null check (reason in ('spam','harassment','inappropriate','impersonation','other')),
+  details     text        check (char_length(details) <= 2000),
+  created_at  timestamptz not null default now(),
+  -- One report per user per person. A second one comes back as 23505, which
+  -- the clients show as "already reported".
+  unique (user_id, reported_id),
+  constraint user_reports_not_self check (user_id <> reported_id)
+);
+
+-- For reading every report about one person in the dashboard.
+create index if not exists user_reports_reported_id_idx on public.user_reports (reported_id);
+
+alter table public.user_reports enable row level security;
+
+create policy "Users can report other users"
+  on public.user_reports for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+revoke all on public.user_reports from anon, authenticated;
+grant insert (user_id, reported_id, reason, details) on public.user_reports to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- blocks
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.blocks (
+  id         uuid        primary key default gen_random_uuid(),
+  blocker_id uuid        not null references public.profiles (id) on delete cascade,
+  blocked_id uuid        not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  -- Also the index that serves "everyone I have blocked", the only read.
+  unique (blocker_id, blocked_id),
+  constraint blocks_not_self check (blocker_id <> blocked_id)
+);
+
+alter table public.blocks enable row level security;
+
+create policy "Users can view their own blocks"
+  on public.blocks for select
+  to authenticated
+  using (auth.uid() = blocker_id);
+
+create policy "Users can block others"
+  on public.blocks for insert
+  to authenticated
+  with check (auth.uid() = blocker_id);
+
+create policy "Users can unblock"
+  on public.blocks for delete
+  to authenticated
+  using (auth.uid() = blocker_id);
+
+revoke all on public.blocks from anon, authenticated;
+grant select, delete on public.blocks to authenticated;
+grant insert (blocker_id, blocked_id) on public.blocks to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Verification
+-- ---------------------------------------------------------------------------
+--
+-- After applying, with the anon key and no session:
+--   select from user_reports  -> permission denied
+--   select from blocks        -> permission denied
+--
+-- Signed in as A:
+--   insert into blocks (blocker_id, blocked_id) values (A, B)   -> ok
+--   insert the same row again                                    -> 23505
+--   insert into blocks (blocker_id, blocked_id) values (B, A)   -> 42501, not yours
+--   insert into blocks (blocker_id, blocked_id) values (A, A)   -> 23514
+--   select from blocks                                           -> only A's rows
+--   insert into user_reports (user_id, reported_id, reason)
+--     values (A, B, 'spam')                                      -> ok
+--   select from user_reports                                     -> permission denied
+
+-- --------------------------------------------------------------------------
+-- 20261007000000_report_reason_impersonation.sql
+-- --------------------------------------------------------------------------
+
+-- Let a prompt be reported for showing a real person.
+--
+-- Paro's images are AI-made, and many start from a photo of a real face. That
+-- is fine when the face is the poster's own. It is not when it is someone
+-- else's: an AI image of a real person posted without their consent can be
+-- impersonation, and a sexual or humiliating one is an offence. The Community
+-- Guidelines and Terms now say so, and the person shown needs a direct way to
+-- say "that is me".
+--
+-- user_reports has had 'impersonation' since 20261003000000, for accounts
+-- pretending to be someone. This adds the same reason to prompt_reports, so
+-- the report lands on the image itself rather than under 'other'.
+--
+-- The check on reason was declared inline in the first migration, so its
+-- name was chosen by Postgres (normally prompt_reports_reason_check). Rather
+-- than trust the name, drop whichever check on this table mentions the reason
+-- list: a leftover old check would keep rejecting the new value even with the
+-- new one in place. Replacing a check takes a brief lock on a small table,
+-- and every existing row already passes the wider list.
+
+do $$
+declare
+  old_check record;
+begin
+  for old_check in
+    select conname
+      from pg_constraint
+     where conrelid = 'public.prompt_reports'::regclass
+       and contype = 'c'
+       and pg_get_constraintdef(oid) like '%misleading%'
+  loop
+    execute format('alter table public.prompt_reports drop constraint %I', old_check.conname);
+  end loop;
+end $$;
+
+alter table public.prompt_reports
+  add constraint prompt_reports_reason_check
+    check (reason in ('spam','misleading','inappropriate','impersonation','copyright','other'));
+
+-- Verification, signed in as any user:
+--   insert into prompt_reports (user_id, prompt_id, reason)
+--     values (auth.uid(), <a prompt id>, 'impersonation')   -> ok
+--   ... reason 'nonsense'                                    -> 23514
+
+-- --------------------------------------------------------------------------
+-- 20261007010000_harden_against_abuse.sql
+-- --------------------------------------------------------------------------
+
+-- Close the holes an adversarial review found on 2026-10-07.
+--
+-- Everyone has the anon key, and anyone can make an account with Google, so
+-- the only real limits are the ones the database enforces. Each of these was
+-- a rule that existed in the apps but could be skipped by calling the API
+-- directly:
+--
+--   1. The 3 prompts a day limit did not hold for a bulk insert. The check ran
+--      BEFORE each row and counted prompt_uploads, which is only written AFTER
+--      the whole statement, so every row of one request saw the same old
+--      count. One request with 1,000 rows posted 1,000 prompts.
+--   2. A rating could be moved to another prompt. The counter trigger only
+--      recomputed the prompt it landed on, so one account could leave any
+--      prompt showing hundreds of ratings, or strip another's count to zero.
+--   3. Feedback and reports had no limit. Each row also sends a Discord
+--      message now, so a flood would have buried real reports and filled the
+--      database.
+--   4. Prompt images could be uploaded into subfolders. Account deletion only
+--      clears the top level, so those files outlived the account, and with it
+--      the upload allowance that was meant to cap them.
+--   5. Anyone, signed out, could list every folder in the avatars and banners
+--      buckets. Public buckets serve files by address without a read policy;
+--      the policy only enabled listing.
+--   6. Titles, prompt text, the AI tool and tags had no size limit outside the
+--      forms. One multi megabyte title would have ridden along in every feed
+--      page.
+--   7. Names like "admin" and "support" could be taken by anyone, and an
+--      account could post without ever choosing a username.
+--
+-- Every limit below sits above what the apps allow, so nobody using Paro
+-- normally meets one. Checked against production on 2026-10-07: the longest
+-- title is 26 characters, the most tags 8, and the only reserved name in use
+-- is the verified parostudio account.
+--
+-- One transaction. If any existing row breaks a new rule the whole migration
+-- fails and changes nothing, which is the point: a check added NOT VALID
+-- would still be enforced on every later update of the old row, including
+-- the counter triggers, and would break likes and views on that prompt.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- 1. The daily upload limit, for any number of rows
+-- ---------------------------------------------------------------------------
+
+-- Still checked before the insert, so the common case fails early with the
+-- same message. Also the place a missing username is caught.
+create or replace function public.check_prompt_upload_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  poster record;
+  daily_upload_count integer;
+  day_start timestamptz;
+begin
+  perform pg_advisory_xact_lock(hashtext('prompt_upload:' || new.user_id::text));
+
+  select coalesce(verified, false) as verified, username into poster
+  from public.profiles
+  where id = new.user_id;
+
+  if poster.username is null then
+    raise exception 'Choose a username before posting.'
+      using errcode = '23514';
+  end if;
+
+  if poster.verified then
+    return new;
+  end if;
+
+  day_start := date_trunc('day', now() at time zone 'UTC') at time zone 'UTC';
+
+  select count(*) into daily_upload_count
+  from public.prompt_uploads
+  where user_id = new.user_id
+    and created_at >= day_start;
+
+  if daily_upload_count >= 3 then
+    raise exception 'Daily prompt upload limit reached for unverified accounts (3 per day). Limit resets at midnight UTC.'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- And again after, where it counts. AFTER ROW triggers run one by one once
+-- the statement's rows are all in, and each sees the uploads logged by the
+-- ones before it. The fourth raises, and that undoes the whole statement.
+create or replace function public.log_prompt_upload()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  day_start timestamptz := date_trunc('day', now() at time zone 'UTC') at time zone 'UTC';
+begin
+  perform pg_advisory_xact_lock(hashtext('prompt_upload:' || new.user_id::text));
+
+  insert into public.prompt_uploads (user_id, prompt_id, created_at)
+  values (new.user_id, new.id, now());
+
+  if not coalesce((select verified from public.profiles where id = new.user_id), false)
+     and (select count(*)
+            from public.prompt_uploads
+           where user_id = new.user_id
+             and created_at >= day_start) > 3 then
+    raise exception 'Daily prompt upload limit reached for unverified accounts (3 per day). Limit resets at midnight UTC.'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 2. Ratings stay on the prompt and the user they were given for
+-- ---------------------------------------------------------------------------
+
+-- A trigger rather than a column grant: both apps save a rating with an
+-- upsert, which names every column in its update, so limiting UPDATE to the
+-- rating column would break them. Writing the same prompt and user back is
+-- fine; changing either is not.
+create or replace function public.keep_rating_target()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.prompt_id is distinct from old.prompt_id
+     or new.user_id is distinct from old.user_id then
+    raise exception 'A rating cannot be moved to another prompt or user.'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists keep_rating_target on public.prompt_ratings;
+create trigger keep_rating_target
+  before update on public.prompt_ratings
+  for each row execute function public.keep_rating_target();
+
+-- The count is recounted from the rows each time instead of being stepped up
+-- and down, so it cannot drift from the truth whatever happens to a row.
+create or replace function public.handle_prompt_rating()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target uuid := case when tg_op = 'DELETE' then old.prompt_id else new.prompt_id end;
+begin
+  update public.prompts
+  set
+    rating_count = (select count(*) from public.prompt_ratings where prompt_id = target),
+    rating_average = (select round(avg(rating)::numeric, 2) from public.prompt_ratings where prompt_id = target)
+  where id = target;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+-- Put right anything that has already drifted.
+update public.prompts p
+set rating_count = coalesce((select count(*) from public.prompt_ratings pr where pr.prompt_id = p.id), 0),
+    rating_average = (select round(avg(rating)::numeric, 2) from public.prompt_ratings pr where pr.prompt_id = p.id)
+where p.rating_count is distinct from coalesce((select count(*) from public.prompt_ratings pr where pr.prompt_id = p.id), 0)
+   or p.rating_average is distinct from (select round(avg(rating)::numeric, 2) from public.prompt_ratings pr where pr.prompt_id = p.id);
+
+-- ---------------------------------------------------------------------------
+-- 3. A daily limit on feedback and reports
+-- ---------------------------------------------------------------------------
+
+-- One function for all three tables; the limit is the trigger's argument.
+-- Counted over the last 24 hours per user. Rows from earlier in the same
+-- statement are visible to a BEFORE ROW trigger, so a bulk insert is caught
+-- row by row. created_at is set here as well: these tables still let a
+-- client send it, and a backdated row would otherwise fall outside the count.
+create or replace function public.limit_daily_submissions()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  daily_limit integer := tg_argv[0]::integer;
+  sent integer;
+begin
+  new.created_at := now();
+
+  perform pg_advisory_xact_lock(hashtext(tg_table_name || ':' || new.user_id::text));
+
+  execute format(
+    'select count(*) from public.%I where user_id = $1 and created_at >= now() - interval ''24 hours''',
+    tg_table_name
+  ) into sent using new.user_id;
+
+  if sent >= daily_limit then
+    raise exception 'Daily limit reached. Try again tomorrow.'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists limit_daily_feedback on public.feedback;
+create trigger limit_daily_feedback
+  before insert on public.feedback
+  for each row execute function public.limit_daily_submissions('5');
+
+drop trigger if exists limit_daily_prompt_reports on public.prompt_reports;
+create trigger limit_daily_prompt_reports
+  before insert on public.prompt_reports
+  for each row execute function public.limit_daily_submissions('30');
+
+drop trigger if exists limit_daily_user_reports on public.user_reports;
+create trigger limit_daily_user_reports
+  before insert on public.user_reports
+  for each row execute function public.limit_daily_submissions('15');
+
+-- ---------------------------------------------------------------------------
+-- 4. Prompt images sit directly in the user's folder, never deeper
+-- ---------------------------------------------------------------------------
+
+drop policy if exists "Users can upload own prompt images" on storage.objects;
+create policy "Users can upload own prompt images"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'prompt-images'
+    and name ~ ('^' || (auth.uid())::text || '/[^/]+$')
+    and public.prompt_image_quota_ok()
+  );
+
+-- ---------------------------------------------------------------------------
+-- 5. No listing other people's avatars and banners
+-- ---------------------------------------------------------------------------
+
+-- Reading your own is kept: replacing a file with upsert needs to see it.
+drop policy if exists "Public read avatars" on storage.objects;
+drop policy if exists "Users can view own avatar" on storage.objects;
+create policy "Users can view own avatar"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'avatars'
+    and (auth.uid())::text = (storage.foldername(name))[1]
+  );
+
+drop policy if exists "Public read banners" on storage.objects;
+drop policy if exists "Users can view own banner" on storage.objects;
+create policy "Users can view own banner"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'banners'
+    and (auth.uid())::text = (storage.foldername(name))[1]
+  );
+
+-- ---------------------------------------------------------------------------
+-- 6. Size limits on a prompt's fields
+-- ---------------------------------------------------------------------------
+
+-- The forms allow a 100 character title and 3 to 8 tags. immutable_array_to_string
+-- is the wrapper added for the search index; array_to_string itself is not
+-- allowed in a check.
+alter table public.prompts
+  add constraint prompts_title_length
+    check (char_length(title) <= 150),
+  add constraint prompts_prompt_length
+    check (prompt is null or char_length(prompt) <= 20000),
+  add constraint prompts_ai_tool_length
+    check (char_length(ai_tool) <= 60),
+  add constraint prompts_tags_shape
+    check (
+      tags is null
+      or (cardinality(tags) <= 12
+          and char_length(public.immutable_array_to_string(tags, '')) <= 400)
+    );
+
+-- ---------------------------------------------------------------------------
+-- 7. Names that read as official are for verified accounts only
+-- ---------------------------------------------------------------------------
+
+alter table public.profiles
+  add constraint profiles_username_not_reserved
+    check (
+      coalesce(verified, false)
+      or username is null
+      or username not in (
+        'admin', 'administrator', 'paro', 'parostudio', 'parostudios',
+        'paro_studio', 'paro_studios', 'paro_official', 'official', 'support',
+        'help', 'moderator', 'mod', 'staff', 'team', 'security', 'root',
+        'system', 'null', 'undefined'
+      )
+    );
+
+commit;
+
+-- Verification, signed in as an unverified user with a username:
+--
+--   insert four prompts in ONE request (a JSON array)      -> P0001, none saved
+--   update prompt_ratings set prompt_id = <another>         -> 42501
+--   insert six feedback rows in a day                       -> sixth is P0001
+--   upload to prompt-images/<uid>/sub/file.jpg              -> 42501
+--   update profiles set username = 'admin'                  -> 23514
+--   insert a prompt with a 200 character title              -> 23514
+--
+-- Signed out:
+--   POST /storage/v1/object/list/avatars                    -> []
+
+-- --------------------------------------------------------------------------
+-- 20261007020000_honest_counts_and_own_storage.sql
+-- --------------------------------------------------------------------------
+
+-- Four loose ends from the 2026-10-07 review, each a number or a link that the
+-- person it belongs to could fake:
+--
+--   1. A creator could rate their own prompt.
+--   2. A creator copying their own prompt raised its copy count, once a day,
+--      which is what "Most copied" sorts by.
+--   3. A signed out view was counted against the first address in the
+--      x-forwarded-for header. Every proxy appends to that header, so the
+--      first entry is whatever the caller typed. A fresh made up address per
+--      request added 30 views an hour to any prompt, and the same 30 requests
+--      used up the hour's signed out allowance for someone else's prompt.
+--   4. Image links were accepted from any Supabase project. Someone could
+--      point a prompt at a bucket in their own project: no size or type
+--      limits, a picture they can swap after people liked it, and every
+--      viewer's IP address in their logs.
+--
+-- Nobody using Paro normally meets any of this. Both apps already hide the
+-- rating stars from a prompt's creator.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- 1. No rating your own prompt
+-- ---------------------------------------------------------------------------
+
+-- Before insert covers the apps' upsert too: Postgres runs this before it
+-- looks for a conflict, so an existing self rating cannot be changed either.
+create or replace function public.reject_self_rating()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1 from public.prompts p
+     where p.id = new.prompt_id and p.user_id = new.user_id
+  ) then
+    raise exception 'You cannot rate your own prompt.'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists reject_self_rating on public.prompt_ratings;
+create trigger reject_self_rating
+  before insert on public.prompt_ratings
+  for each row execute function public.reject_self_rating();
+
+-- Self ratings given before today come out, so the averages mean what they
+-- say. The rating trigger recounts each prompt as its row goes.
+delete from public.prompt_ratings pr
+ using public.prompts p
+ where p.id = pr.prompt_id
+   and p.user_id = pr.user_id;
+
+-- ---------------------------------------------------------------------------
+-- 2. Copying your own prompt is not a copy
+-- ---------------------------------------------------------------------------
+
+create or replace function public.increment_copy_count(prompt_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target uuid := increment_copy_count.prompt_id;
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    return;
+  end if;
+
+  -- Not a prompt, or the caller's own.
+  if not exists (select 1 from public.prompts p where p.id = target and p.user_id <> uid) then
+    return;
+  end if;
+
+  if public.claim_prompt_counter(target, 'copy', 'u:' || uid::text, interval '24 hours') then
+    update public.prompts p
+       set copy_count = p.copy_count + 1
+     where p.id = target;
+  end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 3. Signed out views are counted against an address the caller cannot choose
+-- ---------------------------------------------------------------------------
+
+-- Supabase sits behind Cloudflare, which sets cf-connecting-ip to the real
+-- client address and overwrites anything the caller sent under that name.
+-- Where that header is missing, the LAST x-forwarded-for entry is the one
+-- added by our own proxy; earlier entries are the caller's to invent. The
+-- last entry can be a shared proxy address, which undercounts. Undercounting
+-- a soft number is the safe way to be wrong; the old way could be driven up
+-- at will.
+create or replace function public.prompt_counter_actor()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  headers json;
+  forwarded text[];
+  ip text;
+begin
+  if uid is not null then
+    return 'u:' || uid::text;
+  end if;
+
+  begin
+    headers := nullif(current_setting('request.headers', true), '')::json;
+  exception when others then
+    headers := null;
+  end;
+
+  ip := trim(coalesce(headers ->> 'cf-connecting-ip', ''));
+
+  if ip = '' then
+    forwarded := string_to_array(coalesce(headers ->> 'x-forwarded-for', ''), ',');
+    ip := trim(coalesce(forwarded[array_length(forwarded, 1)], ''));
+  end if;
+
+  if ip = '' then
+    ip := trim(coalesce(headers ->> 'x-real-ip', ''));
+  end if;
+
+  if ip = '' then
+    return 'ip:unknown';
+  end if;
+
+  return 'ip:' || md5(ip);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4. Image links must be in this project's own storage
+-- ---------------------------------------------------------------------------
+
+-- Which host is "ours" differs per project, so it cannot be written into a
+-- migration that contributors also run against their own Supabase projects.
+-- It lives in one row instead. Production sets it once, by hand:
+--
+--   insert into public.app_config (key, value)
+--   values ('storage_host', '<project ref>.supabase.co')
+--   on conflict (key) do update set value = excluded.value;
+--
+-- With no row, any *.supabase.co host is accepted, as before, so a fresh
+-- project works without setup.
+create table if not exists public.app_config (
+  key   text primary key,
+  value text not null
+);
+
+alter table public.app_config enable row level security;
+-- No policies and no grants: nothing reads this through the API.
+revoke all on public.app_config from anon, authenticated;
+
+create or replace function public.own_storage_host()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select value from public.app_config where key = 'storage_host';
+$$;
+
+revoke all on function public.own_storage_host() from public, anon, authenticated;
+
+-- The pattern a stored file's address must match: the configured host when
+-- there is one, otherwise any Supabase project. Dots in the host are escaped
+-- so they match only a dot.
+create or replace function public.storage_url_pattern(bucket text, folder text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select '^https://'
+      || coalesce(replace(public.own_storage_host(), '.', '\.'), '[a-z0-9-]+\.supabase\.co')
+      || '/storage/v1/object/public/' || bucket || '/' || folder || '/[^/?#]+(\?[^#]*)?$';
+$$;
+
+revoke all on function public.storage_url_pattern(text, text) from public, anon;
+grant execute on function public.storage_url_pattern(text, text) to authenticated;
+
+-- Prompt images. Still security invoker: current_user has to be the caller.
+create or replace function public.check_prompt_image_url()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user not in ('anon', 'authenticated') then
+    return new;
+  end if;
+
+  if new.image_url !~ public.storage_url_pattern('prompt-images', new.user_id::text) then
+    raise exception 'Prompt images must be uploaded through the app.'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Avatars and banners. The table checks from 20260922120100 stay as the
+-- outer rule (a Supabase address or a Google photo); a check cannot read a
+-- table, so the host is narrowed here, and only when one of the two columns
+-- is being written, never on a counter update.
+create or replace function public.check_profile_image_urls()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user not in ('anon', 'authenticated') then
+    return new;
+  end if;
+
+  if new.avatar_url is not null
+     and new.avatar_url !~ '^https://lh[0-9]\.googleusercontent\.com/'
+     and new.avatar_url !~ public.storage_url_pattern('avatars', new.id::text) then
+    raise exception 'Profile photos must be uploaded through the app.'
+      using errcode = '23514';
+  end if;
+
+  if new.cover_url is not null
+     and new.cover_url !~ public.storage_url_pattern('banners', new.id::text) then
+    raise exception 'Banners must be uploaded through the app.'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists check_profile_image_urls on public.profiles;
+create trigger check_profile_image_urls
+  before insert or update of avatar_url, cover_url on public.profiles
+  for each row execute function public.check_profile_image_urls();
+
+commit;
+
+-- Verification, signed in:
+--   rate your own prompt                                    -> 23514
+--   rpc increment_copy_count on your own prompt             -> count unchanged
+--   with storage_host set, save an image_url on another
+--     project's host                                        -> 23514
+-- Signed out:
+--   two rpc increment_view_count calls on one prompt with
+--     different made up X-Forwarded-For values              -> one view at most
+
+-- --------------------------------------------------------------------------
+-- 20261009000000_push_notifications.sql
+-- --------------------------------------------------------------------------
+
+-- Push notifications for the mobile app: where to send them, and a record of
+-- what was sent.
+--
+-- The app tells people when someone follows them, likes one of their prompts,
+-- or when a creator they follow posts. Sending is done by the send-push Edge
+-- Function, with the service role. This migration gives it two tables.
+--
+-- push_tokens          One row per phone: the address Expo's push service
+--                      delivers to, and whose phone it is right now. Nobody
+--                      can read or write it through the API. A token is as
+--                      good as the ability to put a message on someone's lock
+--                      screen, so the app can only hand its own over, through
+--                      register_push_token(), and take it back with
+--                      unregister_push_token().
+--
+-- notification_events  What was sent to whom, and about what. Kept so the
+--                      sender can avoid repeating itself: liking, unliking
+--                      and liking again must not buzz someone three times.
+--                      Service only, like push_tokens.
+--
+-- A phone belongs to whoever is signed in on it. When a second account signs
+-- in on the same phone, the token moves to that account, so the first
+-- person's notifications stop arriving there. Signing out removes it.
+--
+-- Both tables point at public.profiles (id) and delete with it, as every
+-- table has since 20260907000000, so deleting an account removes its tokens
+-- and its history in both directions.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- push_tokens
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.push_tokens (
+  token        text        primary key,
+  user_id      uuid        not null references public.profiles (id) on delete cascade,
+  platform     text        not null check (platform in ('android', 'ios')),
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  -- What Expo hands out: ExponentPushToken[...] or ExpoPushToken[...]. Anything
+  -- else is not an address we could send to, so it is not stored.
+  constraint push_tokens_token_shape
+    check (token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_:\-]{10,200}\]$')
+);
+
+create index if not exists push_tokens_user_id_idx on public.push_tokens (user_id);
+
+alter table public.push_tokens enable row level security;
+-- No policies and no grants: the two functions below are the only way in.
+revoke all on public.push_tokens from anon, authenticated;
+
+-- The signed in user's phone. Security definer so it can move a token that
+-- currently belongs to another account on the same phone.
+create or replace function public.register_push_token(push_token text, device_platform text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'Sign in to turn on notifications.' using errcode = '42501';
+  end if;
+
+  insert into public.push_tokens (token, user_id, platform)
+  values (push_token, uid, device_platform)
+  on conflict (token) do update
+    set user_id = excluded.user_id,
+        platform = excluded.platform,
+        last_seen_at = now();
+
+  -- Ten phones is more than anyone has. Past that, the ones not seen for the
+  -- longest go, so the table cannot be filled from one account.
+  delete from public.push_tokens
+   where user_id = uid
+     and token not in (
+       select token from public.push_tokens
+        where user_id = uid
+        order by last_seen_at desc
+        limit 10
+     );
+end;
+$$;
+
+revoke all on function public.register_push_token(text, text) from public, anon;
+grant execute on function public.register_push_token(text, text) to authenticated;
+
+-- Only your own: a token that has since moved to another account stays put.
+create or replace function public.unregister_push_token(push_token text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from public.push_tokens
+   where token = push_token
+     and user_id = auth.uid();
+$$;
+
+revoke all on function public.unregister_push_token(text) from public, anon;
+grant execute on function public.unregister_push_token(text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- notification_events
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.notification_events (
+  id           uuid        primary key default gen_random_uuid(),
+  recipient_id uuid        not null references public.profiles (id) on delete cascade,
+  actor_id     uuid        not null references public.profiles (id) on delete cascade,
+  kind         text        not null check (kind in ('follow', 'like', 'new_prompt')),
+  prompt_id    uuid        references public.prompts (id) on delete cascade,
+  created_at   timestamptz not null default now()
+);
+
+-- "Has this person already been told about this?" is the only question asked.
+create index if not exists notification_events_lookup_idx
+  on public.notification_events (recipient_id, kind, created_at desc);
+
+alter table public.notification_events enable row level security;
+revoke all on public.notification_events from anon, authenticated;
+
+commit;
+
+-- Verification, signed in as A:
+--   select from push_tokens                                   -> permission denied
+--   rpc register_push_token('ExponentPushToken[abcdefghij]', 'android')  -> ok
+--   rpc register_push_token('not a token', 'android')         -> 23514
+-- Signed in as B, same phone:
+--   rpc register_push_token(the same token, 'android')        -> ok, token is now B's
+-- Signed in as A again:
+--   rpc unregister_push_token(the same token)                 -> ok, removes nothing
+-- Signed out:
+--   rpc register_push_token(...)                              -> permission denied
+
+-- --------------------------------------------------------------------------
+-- 20261021000000_rating_notifications.sql
+-- --------------------------------------------------------------------------
+
+-- Push notifications for ratings: when someone rates one of your prompts.
+--
+-- The send-push function records every notification it sends in
+-- notification_events, and that table only accepted the three kinds there
+-- were (follow, like, new_prompt). This adds 'rating', so a rating can be
+-- recorded and the usual rules apply to it: never twice from the same person
+-- about the same prompt, and at most one per prompt every ten minutes.
+--
+-- Only a new rating notifies. Changing your stars is an update, and the
+-- trigger that calls send-push fires on insert only.
+--
+-- The trigger itself carries the shared secret, so it is created by hand in
+-- the SQL editor, like push_on_follow and push_on_like. See send-push.
+
+begin;
+
+alter table public.notification_events
+  drop constraint if exists notification_events_kind_check;
+
+alter table public.notification_events
+  add constraint notification_events_kind_check
+  check (kind in ('follow', 'like', 'new_prompt', 'rating'));
+
+commit;
+
+-- --------------------------------------------------------------------------
+-- 20261021010000_close_moderation_and_push_gaps.sql
+-- --------------------------------------------------------------------------
+
+-- Closes the gaps a pre-launch review found in moderation and push
+-- notifications, plus two small ones.
+--
+-- 1. A prompt's image cannot be swapped after it passed moderation.
+--    moderate-prompt checks the file a prompt points at when the prompt is
+--    posted, or when image_url changes. But the file itself could be deleted
+--    and a different picture uploaded under the same name: same address, so
+--    nothing ran again. Now a file name that a prompt points at cannot be
+--    uploaded again, and a prompt can only point at a file that exists, which
+--    also stops a post going up before its picture does.
+--
+-- 2. Editing only the words is checked too, and edits are limited.
+--    The moderation trigger fired on image_url alone, so a title, prompt or
+--    tags edit was never checked. It is recreated below to fire on all four.
+--    Every check costs a call to OpenAI and can post to Discord, so changes to
+--    those four columns are capped at 20 a day per person.
+--
+-- 3. Push notifications are only requested when one could be sent.
+--    Every like, follow and rating used to call send-push, which then worked
+--    out that, say, the person had already been told. Liking and unliking in a
+--    loop could spend the free plan's function calls in hours. The decision
+--    is now made here first: nobody told twice, likes and ratings spaced
+--    ten minutes apart per prompt, no call for someone without a phone or who
+--    has blocked the person. send-push still applies the same rules itself.
+--
+-- 4. Likes, follows and ratings get their time from the database. A client
+--    could send any created_at, and a like dated 2099 would sit at the top of
+--    the owner's Activity for good.
+--
+-- 5. A prompt's owner no longer adds views to their own prompt, the same rule
+--    copies already follow.
+--
+-- The triggers that call Edge Functions carry the shared webhook secret, so
+-- they were created by hand in the SQL editor and are not in any migration.
+-- Parts 2 and 3 rebuild them from the ones already there: the secret is read
+-- out of the existing trigger and moved into Vault, and never appears here.
+-- On a database without those triggers (CI, a fresh project) both parts do
+-- nothing.
+
+begin;
+
+-- ---------------------------------------------------------------------------
+-- 1. No swapping a prompt's image
+-- ---------------------------------------------------------------------------
+
+-- The storage path a prompt-images address points at, without any ?query.
+create or replace function public.prompt_image_path(url text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select nullif(
+    regexp_replace(split_part(url, '?', 1), '^.*/storage/v1/object/public/prompt-images/', ''),
+    split_part(url, '?', 1)
+  );
+$$;
+
+-- Whether any prompt points at this file. Security definer: the storage
+-- policy that calls it runs as the uploader, who may not see every prompt
+-- column, and it must see them all.
+create or replace function public.prompt_image_in_use(object_name text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+      from public.prompts p
+     where p.user_id::text = split_part(object_name, '/', 1)
+       and public.prompt_image_path(p.image_url) = object_name
+  );
+$$;
+
+revoke all on function public.prompt_image_in_use(text) from public, anon;
+grant execute on function public.prompt_image_in_use(text) to authenticated;
+
+-- Whether the file behind an address has been uploaded.
+create or replace function public.prompt_image_exists(url text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+      from storage.objects o
+     where o.bucket_id = 'prompt-images'
+       and o.name = public.prompt_image_path(url)
+  );
+$$;
+
+revoke all on function public.prompt_image_exists(text) from public, anon;
+grant execute on function public.prompt_image_exists(text) to authenticated;
+
+drop policy if exists "Users can upload own prompt images" on storage.objects;
+create policy "Users can upload own prompt images"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'prompt-images'
+    and name ~ ('^' || (auth.uid())::text || '/[^/]+$')
+    and public.prompt_image_quota_ok()
+    and not public.prompt_image_in_use(name)
+  );
+
+-- As in 20261007020000, plus: the file has to be there.
+create or replace function public.check_prompt_image_url()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user not in ('anon', 'authenticated') then
+    return new;
+  end if;
+
+  if new.image_url !~ public.storage_url_pattern('prompt-images', new.user_id::text) then
+    raise exception 'Prompt images must be uploaded through the app.'
+      using errcode = '23514';
+  end if;
+
+  if not public.prompt_image_exists(new.image_url) then
+    raise exception 'Upload the image before posting the prompt.'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 2. Word edits are checked, and edits are limited
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.prompt_edit_events (
+  id         bigint generated always as identity primary key,
+  user_id    uuid        not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists prompt_edit_events_user_idx
+  on public.prompt_edit_events (user_id, created_at desc);
+
+alter table public.prompt_edit_events enable row level security;
+revoke all on public.prompt_edit_events from anon, authenticated;
+
+-- Counts real changes only: saving the form as it was costs nothing. The
+-- counter triggers and the dashboard never reach the limit, since they act
+-- without a signed in user.
+create or replace function public.limit_prompt_edits()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+  made integer;
+begin
+  if uid is null then
+    return new;
+  end if;
+
+  if new.image_url is not distinct from old.image_url
+     and new.title is not distinct from old.title
+     and new.prompt is not distinct from old.prompt
+     and new.tags is not distinct from old.tags then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('prompt_edits:' || uid::text));
+
+  delete from public.prompt_edit_events
+   where user_id = uid
+     and created_at < now() - interval '2 days';
+
+  select count(*) into made
+    from public.prompt_edit_events
+   where user_id = uid
+     and created_at >= now() - interval '24 hours';
+
+  if made >= 20 then
+    raise exception 'Daily edit limit reached. Try again tomorrow.'
+      using errcode = 'P0001';
+  end if;
+
+  insert into public.prompt_edit_events (user_id) values (uid);
+  return new;
+end;
+$$;
+
+revoke all on function public.limit_prompt_edits() from public, anon, authenticated;
+
+drop trigger if exists limit_prompt_edits on public.prompts;
+create trigger limit_prompt_edits
+  before update of image_url, title, prompt, tags on public.prompts
+  for each row execute function public.limit_prompt_edits();
+
+-- The moderation trigger, rebuilt to fire on the words as well.
+do $$
+declare
+  args text[];
+begin
+  select string_to_array(encode(t.tgargs, 'escape'), '\000')
+    into args
+    from pg_trigger t
+   where t.tgname = 'moderate_changed_prompt_image'
+     and t.tgrelid = 'public.prompts'::regclass;
+
+  if args is null then
+    return;
+  end if;
+
+  drop trigger moderate_changed_prompt_image on public.prompts;
+  execute format(
+    'create trigger moderate_changed_prompt_image
+       after update of image_url, title, prompt, tags on public.prompts
+       for each row execute function supabase_functions.http_request(%L, %L, %L, %L, %L)',
+    args[1], args[2], args[3], args[4], args[5]);
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 3. Ask send-push only when there is something to send
+-- ---------------------------------------------------------------------------
+
+-- Fired after a follow, like or rating. Applies the rules send-push applies,
+-- from the same tables, and calls it only if they all pass. The address and
+-- the secret come from Vault, under the names below.
+create or replace function public.request_push()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  what      text;
+  actor     uuid;
+  recipient uuid;
+  about     uuid;
+  base_url  text;
+  secret    text;
+begin
+  if tg_table_name = 'follows' then
+    what := 'follow';
+    actor := new.follower_id;
+    recipient := new.following_id;
+    about := null;
+  else
+    what := case tg_table_name when 'likes' then 'like' else 'rating' end;
+    actor := new.user_id;
+    about := new.prompt_id;
+    select p.user_id into recipient from public.prompts p where p.id = new.prompt_id;
+  end if;
+
+  if recipient is null or recipient = actor then
+    return null;
+  end if;
+
+  -- No phone to send to.
+  if not exists (select 1 from public.push_tokens t where t.user_id = recipient) then
+    return null;
+  end if;
+
+  -- Blocked by the person it would go to.
+  if exists (
+    select 1 from public.blocks b where b.blocker_id = recipient and b.blocked_id = actor
+  ) then
+    return null;
+  end if;
+
+  -- Already told this, by this person.
+  if exists (
+    select 1
+      from public.notification_events e
+     where e.recipient_id = recipient
+       and e.actor_id = actor
+       and e.kind = what
+       and e.prompt_id is not distinct from about
+  ) then
+    return null;
+  end if;
+
+  -- A like or rating on this prompt was announced in the last ten minutes.
+  if about is not null and exists (
+    select 1
+      from public.notification_events e
+     where e.recipient_id = recipient
+       and e.kind = what
+       and e.prompt_id = about
+       and e.created_at > now() - interval '10 minutes'
+  ) then
+    return null;
+  end if;
+
+  select s.decrypted_secret into base_url
+    from vault.decrypted_secrets s where s.name = 'paro_functions_url';
+  select s.decrypted_secret into secret
+    from vault.decrypted_secrets s where s.name = 'paro_webhook_secret';
+  if base_url is null or secret is null then
+    return null;
+  end if;
+
+  perform net.http_post(
+    url := base_url || '/send-push',
+    body := jsonb_build_object(
+      'type', 'INSERT',
+      'table', tg_table_name,
+      'record', jsonb_build_object('id', new.id)
+    ),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-webhook-secret', secret
+    ),
+    timeout_milliseconds := 10000
+  );
+
+  return null;
+end;
+$$;
+
+revoke all on function public.request_push() from public, anon, authenticated;
+
+-- Moves the address and secret out of the hand-made push_on_like trigger into
+-- Vault, then swaps all three hand-made triggers for ones that go through
+-- request_push. Nothing happens where push_on_like does not exist.
+do $$
+declare
+  args    text[];
+  base    text;
+  secret  text;
+begin
+  select string_to_array(encode(t.tgargs, 'escape'), '\000')
+    into args
+    from pg_trigger t
+   where t.tgname = 'push_on_like'
+     and t.tgrelid = 'public.likes'::regclass
+     -- Already swapped, on a second run: nothing to do.
+     and t.tgfoid <> 'public.request_push'::regproc;
+
+  if args is null then
+    return;
+  end if;
+
+  base := regexp_replace(args[1], '/send-push$', '');
+  secret := (args[3]::jsonb) ->> 'x-webhook-secret';
+  if base = args[1] or secret is null then
+    raise exception 'push_on_like does not look as expected; left as it is';
+  end if;
+
+  if not exists (select 1 from vault.secrets where name = 'paro_functions_url') then
+    perform vault.create_secret(base, 'paro_functions_url', 'Edge Functions address, for request_push');
+  end if;
+  if not exists (select 1 from vault.secrets where name = 'paro_webhook_secret') then
+    perform vault.create_secret(secret, 'paro_webhook_secret', 'x-webhook-secret for Edge Functions');
+  end if;
+
+  drop trigger if exists push_on_follow on public.follows;
+  drop trigger if exists push_on_like on public.likes;
+  drop trigger if exists push_on_rating on public.prompt_ratings;
+
+  create trigger push_on_follow
+    after insert on public.follows
+    for each row execute function public.request_push();
+  create trigger push_on_like
+    after insert on public.likes
+    for each row execute function public.request_push();
+  create trigger push_on_rating
+    after insert on public.prompt_ratings
+    for each row execute function public.request_push();
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 4. created_at on likes, follows and ratings comes from the database
+-- ---------------------------------------------------------------------------
+
+create or replace function public.set_created_at_now()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    new.created_at := now();
+  else
+    new.created_at := old.created_at;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists set_created_at_now on public.likes;
+create trigger set_created_at_now
+  before insert on public.likes
+  for each row execute function public.set_created_at_now();
+
+drop trigger if exists set_created_at_now on public.follows;
+create trigger set_created_at_now
+  before insert on public.follows
+  for each row execute function public.set_created_at_now();
+
+drop trigger if exists set_created_at_now on public.prompt_ratings;
+create trigger set_created_at_now
+  before insert or update on public.prompt_ratings
+  for each row execute function public.set_created_at_now();
+
+-- ---------------------------------------------------------------------------
+-- 5. No views on your own prompt
+-- ---------------------------------------------------------------------------
+
+-- As in 20260915120000, with the owner left out like increment_copy_count.
+create or replace function public.increment_view_count(prompt_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target uuid := increment_view_count.prompt_id;
+  actor text;
+  recent_anonymous integer;
+begin
+  if not exists (
+    select 1 from public.prompts p
+     where p.id = target
+       and p.user_id is distinct from auth.uid()
+  ) then
+    return;
+  end if;
+
+  actor := public.prompt_counter_actor();
+
+  if actor like 'ip:%' then
+    select count(*) into recent_anonymous
+      from public.prompt_counter_events e
+     where e.prompt_id = target
+       and e.kind = 'view'
+       and e.actor like 'ip:%'
+       and e.counted_at > now() - interval '1 hour';
+
+    if recent_anonymous >= 30 then
+      return;
+    end if;
+  end if;
+
+  if public.claim_prompt_counter(target, 'view', actor, interval '30 minutes') then
+    update public.prompts p
+       set view_count = p.view_count + 1
+     where p.id = target;
+  end if;
+end;
+$$;
+
+commit;
+
+-- --------------------------------------------------------------------------
+-- 20261021020000_moderate_profile_images.sql
+-- --------------------------------------------------------------------------
+
+-- Profile photos and banners are checked by moderation when uploaded.
+--
+-- Prompts have been checked since 20261007020000, but a profile photo or
+-- banner never was. They cannot be checked from the profiles row: a new
+-- photo replaces the file at the same address ({user id}/avatar.jpg), so the
+-- row need not change at all. So this watches storage itself. Every write to
+-- avatars or banners by a signed in user asks the moderate-profile-image
+-- Edge Function to look at the file, the same way request_push asks send-push
+-- (20261021010000), with the address and secret from Vault.
+--
+-- Each check costs a call to OpenAI and may post to Discord, so a person can
+-- write at most 10 profile pictures a day between the two buckets. The 11th
+-- upload is refused with P0001.
+--
+-- Writes with no signed in user (the dashboard, the Edge Functions' own
+-- clean up) are not checked or counted. Where Vault or pg_net is missing
+-- (CI, a local database) the limit still applies and the call is skipped.
+
+begin;
+
+create table if not exists public.profile_image_events (
+  id         bigint generated always as identity primary key,
+  user_id    uuid        not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists profile_image_events_user_idx
+  on public.profile_image_events (user_id, created_at desc);
+
+alter table public.profile_image_events enable row level security;
+revoke all on public.profile_image_events from anon, authenticated;
+
+create or replace function public.request_profile_image_check()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid      uuid := auth.uid();
+  made     integer;
+  base_url text;
+  secret   text;
+begin
+  if uid is null then
+    return null;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('profile_images:' || uid::text));
+
+  delete from public.profile_image_events
+   where user_id = uid
+     and created_at < now() - interval '2 days';
+
+  select count(*) into made
+    from public.profile_image_events
+   where user_id = uid
+     and created_at >= now() - interval '24 hours';
+
+  if made >= 10 then
+    raise exception 'Daily limit on profile pictures reached. Try again tomorrow.'
+      using errcode = 'P0001';
+  end if;
+
+  insert into public.profile_image_events (user_id) values (uid);
+
+  if to_regclass('vault.decrypted_secrets') is null
+     or to_regprocedure('net.http_post(text, jsonb, jsonb, jsonb, integer)') is null then
+    return null;
+  end if;
+
+  select s.decrypted_secret into base_url
+    from vault.decrypted_secrets s where s.name = 'paro_functions_url';
+  select s.decrypted_secret into secret
+    from vault.decrypted_secrets s where s.name = 'paro_webhook_secret';
+  if base_url is null or secret is null then
+    return null;
+  end if;
+
+  perform net.http_post(
+    url := base_url || '/moderate-profile-image',
+    body := jsonb_build_object('bucket', new.bucket_id, 'name', new.name),
+    params := '{}'::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-webhook-secret', secret
+    ),
+    timeout_milliseconds := 10000
+  );
+
+  return null;
+end;
+$$;
+
+revoke all on function public.request_profile_image_check() from public, anon, authenticated;
+
+drop trigger if exists check_new_profile_image on storage.objects;
+create trigger check_new_profile_image
+  after insert on storage.objects
+  for each row
+  when (new.bucket_id in ('avatars', 'banners'))
+  execute function public.request_profile_image_check();
+
+-- Replacing a photo in place is an update that gives the object a new
+-- version. Other updates (metadata touched by Storage itself) are not new
+-- pictures. Only where the column exists: CI's stand-in table has no version.
+drop trigger if exists check_replaced_profile_image on storage.objects;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'storage' and table_name = 'objects' and column_name = 'version'
+  ) then
+    create trigger check_replaced_profile_image
+      after update on storage.objects
+      for each row
+      when (new.bucket_id in ('avatars', 'banners') and new.version is distinct from old.version)
+      execute function public.request_profile_image_check();
+  end if;
+end $$;
+
+commit;
+
+-- --------------------------------------------------------------------------
+-- 20261021030000_profile_image_owner.sql
+-- --------------------------------------------------------------------------
+
+-- Profile picture checks: find the uploader from the file, not the session.
+--
+-- 20261021020000 took the uploader from auth.uid(), and skipped writes with
+-- no signed in user. But Storage checks the upload as the user and then
+-- writes the file over its own connection, where auth.uid() is empty, so
+-- every real upload was skipped. Storage records who uploaded a file in
+-- owner_id (owner on older projects), which is used here when there is no
+-- session. A file with neither, such as one added in the dashboard, is still
+-- skipped.
+
+begin;
+
+create or replace function public.request_profile_image_check()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  -- Read through jsonb, so a Storage without one of the columns still works.
+  uid      uuid := coalesce(
+    auth.uid(),
+    nullif(to_jsonb(new) ->> 'owner_id', '')::uuid,
+    nullif(to_jsonb(new) ->> 'owner', '')::uuid
+  );
+  made     integer;
+  base_url text;
+  secret   text;
+begin
+  if uid is null then
+    return null;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('profile_images:' || uid::text));
+
+  delete from public.profile_image_events
+   where user_id = uid
+     and created_at < now() - interval '2 days';
+
+  select count(*) into made
+    from public.profile_image_events
+   where user_id = uid
+     and created_at >= now() - interval '24 hours';
+
+  if made >= 10 then
+    raise exception 'Daily limit on profile pictures reached. Try again tomorrow.'
+      using errcode = 'P0001';
+  end if;
+
+  insert into public.profile_image_events (user_id) values (uid);
+
+  if to_regclass('vault.decrypted_secrets') is null
+     or to_regprocedure('net.http_post(text, jsonb, jsonb, jsonb, integer)') is null then
+    return null;
+  end if;
+
+  select s.decrypted_secret into base_url
+    from vault.decrypted_secrets s where s.name = 'paro_functions_url';
+  select s.decrypted_secret into secret
+    from vault.decrypted_secrets s where s.name = 'paro_webhook_secret';
+  if base_url is null or secret is null then
+    return null;
+  end if;
+
+  perform net.http_post(
+    url := base_url || '/moderate-profile-image',
+    body := jsonb_build_object('bucket', new.bucket_id, 'name', new.name),
+    params := '{}'::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-webhook-secret', secret
+    ),
+    timeout_milliseconds := 10000
+  );
+
+  return null;
+end;
+$$;
+
+revoke all on function public.request_profile_image_check() from public, anon, authenticated;
+
+commit;
+
+-- --------------------------------------------------------------------------
+-- 20261031000000_clean_prompt_tags.sql
+-- --------------------------------------------------------------------------
+
+-- Fix spelling and duplicate forms in the tags on existing prompts.
+--
+-- Tags are free text, so `asthetic` and `aesthetic` counted as different tags:
+-- those prompts were missing from the aesthetic filter and from matches under
+-- More like this. Only typos, plurals and hyphen variants of the same word are
+-- merged. Different words that mean similar things (women and lady, photo and
+-- picture) are left alone. This does not stop new typos being entered.
+--
+-- A prompt's tags changing normally sets off moderation, which costs an OpenAI
+-- call and can post to Discord. No new words are being added here, so nothing
+-- needs checking and triggers on prompts are off for this update. That also
+-- leaves updated_at alone, since nobody edited these prompts.
+
+begin;
+
+alter table public.prompts disable trigger user;
+
+with aliases(typo, tag) as (
+  values
+    ('asthetic', 'aesthetic'),
+    ('desin', 'design'),
+    ('phtoshoot', 'photoshoot'),
+    ('vontage', 'vintage'),
+    ('bollywoood', 'bollywood'),
+    ('corousel', 'carousel'),
+    ('80s era', '80s-era'),
+    ('vangogh', 'van-gogh'),
+    ('movies', 'movie'),
+    ('photos', 'photo'),
+    ('pictures', 'picture'),
+    ('car', 'cars'),
+    ('effect', 'effects'),
+    ('ladies', 'lady')
+)
+update public.prompts p
+   set tags = (
+     -- Keeps the original order, and one copy if a prompt had both spellings.
+     select array_agg(merged.tag order by merged.position)
+       from (
+         select coalesce(a.tag, t.tag) as tag, min(t.position) as position
+           from unnest(p.tags) with ordinality as t(tag, position)
+           left join aliases a on a.typo = t.tag
+          group by 1
+       ) merged
+   )
+ where p.tags && (select array_agg(typo) from aliases);
+
+alter table public.prompts enable trigger user;
+
+commit;
+
+-- --------------------------------------------------------------------------
 -- After running this
 -- --------------------------------------------------------------------------
 --

@@ -56,7 +56,9 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     subtitle: "Don't post content that could seriously harm or exploit others.",
     items: [
       "No threats or encouragement of violence.",
-      "No sexual content involving minors.",
+      "No graphic or gory violence.",
+      "No nudity or sexually explicit images.",
+      "No sexual content involving minors, and nothing that sexualises or endangers children. We remove it, ban the account and report it to the authorities where required.",
       "No exploitation or abuse.",
       "No content intended to facilitate serious wrongdoing.",
       "Don't share someone's private or sensitive information without their permission.",
@@ -105,6 +107,8 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     subtitle: "Paro is a place to explore and share AI-powered ideas.",
     items: [
       "Don't use AI to create content intended to harass, deceive, or harm others.",
+      "Don't post an AI image of a real person without their consent. Your own face is yours to post; someone else's is not.",
+      "Never post an image of a real person that is sexual, humiliating, or made to mislead people about what they said or did.",
       "Don't present generated information as fact when accuracy matters without verifying it.",
       "Be transparent when context makes it important to know that content was AI-generated.",
       "Don't use AI as an excuse to violate these guidelines.",
@@ -142,7 +146,7 @@ const GUIDELINE_SECTIONS: GuidelineSection[] = [
     subtitle: "See something that violates these guidelines?",
     badge: "Report it.",
     paragraph:
-      "When you report content, provide enough information for the Paro team to understand the issue. Please don't use reports to target people simply because you disagree with them.",
+      "You can report a prompt from its menu and an account from its profile, and block any account so its prompts stop appearing for you. The Paro team reviews every report. When you report, provide enough information for us to understand the issue. Please don't use reports to target people simply because you disagree with them.",
   },
   {
     id: 10,

@@ -20,6 +20,7 @@ import Index from "./pages/Index";
 const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
 const CommunityGuidelines = lazy(() => import("./pages/CommunityGuidelines"));
 const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
 const DeleteAccountInfo = lazy(() => import("./pages/DeleteAccountInfo"));
 const ParoOriginals = lazy(() => import("./pages/ParoOriginals"));
 const PromptDetail = lazy(() => import("./pages/PromptDetail"));
@@ -78,6 +79,7 @@ const App = () => (
                 <Route path="/community-guidelines" element={<CommunityGuidelines />} />
                 {/* Public on purpose: Google Play links both from the store listing. */}
                 <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="/delete-account" element={<DeleteAccountInfo />} />
 
                 {/* Open to everyone so shared links work. The prompt text itself is
@@ -87,14 +89,16 @@ const App = () => (
                 <Route path="/prompt/:id" element={<PromptDetail />} />
                 <Route path="/profile/:id" element={<Profile />} />
 
+                {/* Nothing here needs an account, so a footer link shouldn't ask for one. */}
+                <Route path="/top-creators" element={<TopCreators />} />
+                <Route path="/originals" element={<ParoOriginals />} />
+                <Route path="/earn" element={<EarnWithParo />} />
+
                 {/* Protected Routes - require authentication and username */}
-                <Route path="/originals" element={<ProtectedRoute><ParoOriginals /></ProtectedRoute>} />
                 <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
                 <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
                 <Route path="/liked" element={<ProtectedRoute><Liked /></ProtectedRoute>} />
-                <Route path="/top-creators" element={<ProtectedRoute><TopCreators /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                <Route path="/earn" element={<ProtectedRoute><EarnWithParo /></ProtectedRoute>} />
                 <Route path="/feedback" element={<ProtectedRoute><Feedback /></ProtectedRoute>} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 {/* Not protected: a wrong URL should show 404, not bounce the
