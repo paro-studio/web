@@ -51,7 +51,7 @@ describe("card enrichment across collections and recommendations", () => {
       const queryError = client.getQueryState(["recommendations", "current", ["portrait"], "viewer"])?.error; if (queryError) throw queryError;
     }
     const cards = await screen.findAllByTestId("card");
-    expect(cards).toHaveLength(view === "recommendations" ? 4 : 60);
+    expect(cards).toHaveLength(view === "recommendations" ? 6 : 60);
     for (const card of cards) {
       expect(JSON.parse(card.textContent!)).toMatchObject({ likeCount: 17, accuracyRating: 4.5, ratingCount: 8, isLiked: true, isSaved: true, creator: { verified: true } });
     }

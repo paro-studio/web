@@ -170,7 +170,7 @@ export default function PromptDetail() {
       
       const filteredRelated = (relatedPrompts || [])
         .filter((p) => p.id !== id && p.tags && prompt.tags && p.tags.some((tag) => prompt.tags!.includes(tag)))
-        .slice(0, 4);
+        .slice(0, 6);
 
       // Five queries for all of them, rather than requests from every card.
       const relatedIds = filteredRelated.map((p) => p.id);
@@ -670,9 +670,10 @@ export default function PromptDetail() {
               <div className="max-w-[1400px] mx-auto">
                 <h2 className="font-serif text-lg sm:text-xl mb-3 sm:mb-4">More like this</h2>
 
-                {/* A grid, not .masonry-grid: there are only four of these, and
-                    six columns left them bunched into the left third. */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-6 items-start">
+                {/* A grid, not .masonry-grid: CSS columns bunch a short list to the
+                    left. Sized like feed cards. Four columns would leave an
+                    uneven second row, so they only show the first four. */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 lg:gap-6 items-start md:[&>*:nth-child(n+5)]:hidden xl:[&>*:nth-child(n+5)]:block">
                   {recommendations.map((rec) => (
                     <PromptCard
                       key={rec.id}
