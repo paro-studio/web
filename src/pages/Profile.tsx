@@ -388,7 +388,7 @@ export default function Profile() {
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
-        defaultMode="login"
+        defaultMode="action"
       />
     </div>
   );

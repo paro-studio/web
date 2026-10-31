@@ -11,6 +11,10 @@
 --      blocked you, or anything already told
 --   4. likes get their time from the database, not the client
 --   5. an owner adds no views to their own prompt
+--   6. a profile photo or banner upload asks moderate-profile-image to check
+--      it, and an 11th in a day is refused (20261021020000), including when
+--      Storage writes the file over its own connection, with no session and
+--      the uploader in owner_id (20261021030000)
 --
 -- Vault and pg_net exist only on Supabase, so both are stood in for here: the
 -- secrets are a table, and net.http_post writes down what it was asked.
@@ -39,7 +43,9 @@ insert into public.profiles (id, username) values
   ('33333333-3333-3333-3333-333333333333', 'no_phone');
 
 insert into storage.buckets (id, name, public) values
-  ('prompt-images', 'prompt-images', true)
+  ('prompt-images', 'prompt-images', true),
+  ('avatars', 'avatars', true),
+  ('banners', 'banners', true)
 on conflict (id) do nothing;
 
 alter table storage.objects enable row level security;
@@ -73,7 +79,14 @@ insert into vault.decrypted_secrets values
 
 create schema if not exists net;
 create table net.calls (url text, body jsonb, headers jsonb);
-create function net.http_post(url text, body jsonb, headers jsonb, timeout_milliseconds integer)
+-- The same parameters as pg_net's, so callers that look it up find it.
+create function net.http_post(
+  url text,
+  body jsonb default '{}',
+  params jsonb default '{}',
+  headers jsonb default '{}',
+  timeout_milliseconds integer default 5000
+)
 returns bigint language sql as $$
   insert into net.calls values (url, body, headers) returning 1::bigint;
 $$;
@@ -267,6 +280,78 @@ begin
         or body -> 'record' ->> 'id' is null
   ) then
     raise exception 'a call to send-push was not shaped as it expects';
+  end if;
+end;
+$$;
+
+-- 6. Profile pictures ------------------------------------------------------------
+
+set local role authenticated;
+
+do $$
+declare
+  me text := '11111111-1111-1111-1111-111111111111';
+begin
+  insert into storage.objects (bucket_id, name) values ('avatars', me || '/avatar.jpg');
+
+  if not exists (
+    select 1 from net.calls
+     where url = 'https://x.supabase.co/functions/v1/moderate-profile-image'
+       and body ->> 'bucket' = 'avatars'
+       and body ->> 'name' = me || '/avatar.jpg'
+       and headers ->> 'x-webhook-secret' = 'test-secret'
+  ) then
+    raise exception 'a new profile photo was not sent to be checked';
+  end if;
+end;
+$$;
+
+-- Nine more today makes ten; the next one is refused.
+reset role;
+insert into public.profile_image_events (user_id)
+select '11111111-1111-1111-1111-111111111111' from generate_series(1, 9);
+set local role authenticated;
+
+do $$
+begin
+  perform pg_temp.expect_error(
+    $f$insert into storage.objects (bucket_id, name) values ('banners', '11111111-1111-1111-1111-111111111111/banner.jpg')$f$,
+    'P0001', 'an eleventh profile picture in a day');
+end;
+$$;
+
+-- How Storage really writes: permission checked as the user, then the file
+-- written over its own connection, with no session, and the uploader
+-- recorded in owner_id.
+reset role;
+alter table storage.objects add column if not exists owner_id text;
+create or replace function auth.uid()
+returns uuid language sql stable
+as $$ select null::uuid $$;
+
+insert into storage.objects (bucket_id, name, owner_id)
+values ('banners', '22222222-2222-2222-2222-222222222222/banner.jpg', '22222222-2222-2222-2222-222222222222');
+
+do $$
+begin
+  if not exists (
+    select 1 from net.calls
+     where url = 'https://x.supabase.co/functions/v1/moderate-profile-image'
+       and body ->> 'name' = '22222222-2222-2222-2222-222222222222/banner.jpg'
+  ) then
+    raise exception 'a banner written by Storage itself was not sent to be checked';
+  end if;
+end;
+$$;
+
+-- A file with no owner, as from the dashboard, is left alone.
+insert into storage.objects (bucket_id, name)
+values ('avatars', '33333333-3333-3333-3333-333333333333/avatar.jpg');
+
+do $$
+begin
+  if exists (select 1 from net.calls where body ->> 'name' like '33333333-%') then
+    raise exception 'a file with no owner was sent to be checked';
   end if;
 end;
 $$;

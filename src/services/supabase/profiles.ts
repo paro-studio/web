@@ -6,6 +6,7 @@
 
 import { supabase } from './client';
 import type { User } from '@supabase/supabase-js';
+import { isMissingRowError } from '@/lib/errors';
 
 export interface Profile {
   id: string;
@@ -40,8 +41,8 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .single();
 
   if (error) {
-    if (error.code === 'PGRST116') {
-      // No rows returned - profile doesn't exist
+    if (isMissingRowError(error)) {
+      // Profile doesn't exist
       return null;
     }
     console.error('Error fetching profile:', error);

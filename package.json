@@ -66,7 +66,7 @@
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",
     "postcss": "^8.5.6",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.68.0",
