@@ -30,7 +30,7 @@ const PRESENTATION: Record<string, ToolPresentation> = {
   // correct and reads as the wrong product; a drawn banana silhouette is an
   // unreadable hook at this size. The emoji is the one thing that reads.
   "NANO BANANA (Gemini)": { label: "Nano Banana", emoji: "🍌" },
-  "DALL-E 3 (ChatGPT)": { label: "DALL·E", icon: OpenAIIcon },
+  "DALL-E 3 (ChatGPT)": { label: "ChatGPT", icon: OpenAIIcon },
   "Meta AI": { label: "Meta AI", icon: MetaIcon },
   Firefly: { label: "Firefly", icon: AdobeIcon },
   Midjourney: { label: "Midjourney", icon: Sparkles },

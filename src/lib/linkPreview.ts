@@ -35,7 +35,7 @@ export function escapeHtml(text: string): string {
 // Same short names the cards use. Anything else is a custom tool, shown as typed.
 const TOOL_LABELS: Record<string, string> = {
   "NANO BANANA (Gemini)": "Nano Banana",
-  "DALL-E 3 (ChatGPT)": "DALL·E",
+  "DALL-E 3 (ChatGPT)": "ChatGPT",
 };
 
 export function toolLabel(tool: string): string {

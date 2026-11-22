@@ -3,6 +3,8 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { BecomeCreator } from "@/components/BecomeCreator";
+import { canPost } from "@/lib/creators";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -352,9 +354,23 @@ export default function UploadPrompt() {
         <main className="pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 text-center py-12 sm:py-16">
           <h1 className="font-serif text-xl sm:text-2xl mb-3 sm:mb-4">Sign in to upload</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            You need to be signed in to upload prompts
+            Sign in to post as a Paro creator, or to apply to become one.
           </p>
         </main>
+      </div>
+    );
+  }
+
+  // Posting is for creators and verified accounts. Everyone else sees how to
+  // become a creator. The database has the final say.
+  if (!canPost(profile)) {
+    return (
+      <div className="min-h-screen min-h-[100dvh] bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 pt-14 sm:pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8">
+          <BecomeCreator />
+        </main>
+        <Footer />
       </div>
     );
   }
