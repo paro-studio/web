@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       app_config: {
@@ -84,6 +59,41 @@ export type Database = {
           {
             foreignKeyName: "blocks_blocker_id_fkey"
             columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creator_events: {
+        Row: {
+          action: string
+          actor: string
+          created_at: string
+          id: number
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          actor: string
+          created_at?: string
+          id?: never
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          actor?: string
+          created_at?: string
+          id?: never
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_events_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -243,16 +253,44 @@ export type Database = {
           },
         ]
       }
+      profile_image_events: {
+        Row: {
+          created_at: string
+          id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_image_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           bio: string | null
           cover_url: string | null
           created_at: string | null
+          creator_since: string | null
           follower_count: number
           following_count: number
           full_name: string | null
           id: string
+          is_creator: boolean
           updated_at: string | null
           username: string | null
           verified: boolean
@@ -263,10 +301,12 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          creator_since?: string | null
           follower_count?: number
           following_count?: number
           full_name?: string | null
           id: string
+          is_creator?: boolean
           updated_at?: string | null
           username?: string | null
           verified?: boolean
@@ -277,10 +317,12 @@ export type Database = {
           bio?: string | null
           cover_url?: string | null
           created_at?: string | null
+          creator_since?: string | null
           follower_count?: number
           following_count?: number
           full_name?: string | null
           id?: string
+          is_creator?: boolean
           updated_at?: string | null
           username?: string | null
           verified?: boolean
@@ -313,6 +355,32 @@ export type Database = {
             columns: ["prompt_id"]
             isOneToOne: false
             referencedRelation: "prompts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prompt_edit_events: {
+        Row: {
+          created_at: string
+          id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_edit_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -623,6 +691,35 @@ export type Database = {
         }
         Returns: boolean
       }
+      creator_target: {
+        Args: { target_username: string }
+        Returns: {
+          avatar_url: string | null
+          bio: string | null
+          cover_url: string | null
+          created_at: string | null
+          creator_since: string | null
+          follower_count: number
+          following_count: number
+          full_name: string | null
+          id: string
+          is_creator: boolean
+          updated_at: string | null
+          username: string | null
+          verified: boolean
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      grant_creator: {
+        Args: { actor?: string; reason?: string; target_username: string }
+        Returns: undefined
+      }
       immutable_array_to_string: {
         Args: { arr: string[]; sep: string }
         Returns: string
@@ -631,9 +728,16 @@ export type Database = {
       increment_view_count: { Args: { prompt_id: string }; Returns: undefined }
       own_storage_host: { Args: never; Returns: string }
       prompt_counter_actor: { Args: never; Returns: string }
+      prompt_image_exists: { Args: { url: string }; Returns: boolean }
+      prompt_image_in_use: { Args: { object_name: string }; Returns: boolean }
+      prompt_image_path: { Args: { url: string }; Returns: string }
       prompt_image_quota_ok: { Args: never; Returns: boolean }
       register_push_token: {
         Args: { device_platform: string; push_token: string }
+        Returns: undefined
+      }
+      revoke_creator: {
+        Args: { actor?: string; reason?: string; target_username: string }
         Returns: undefined
       }
       storage_url_pattern: {
@@ -772,9 +876,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

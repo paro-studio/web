@@ -13,6 +13,8 @@ export interface UserProfile {
   cover_url: string | null;
   bio: string | null;
   verified?: boolean;
+  /** An approved creator. Posting is for creators and verified accounts. */
+  is_creator?: boolean;
 }
 
 export interface NormalizedPrompt {
