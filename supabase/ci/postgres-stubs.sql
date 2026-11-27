@@ -28,6 +28,10 @@ begin
   if not exists (select from pg_roles where rolname = 'service_role') then
     create role service_role nologin;
   end if;
+  -- The role Supabase Auth runs its hooks as.
+  if not exists (select from pg_roles where rolname = 'supabase_auth_admin') then
+    create role supabase_auth_admin nologin;
+  end if;
 end
 $$;
 
